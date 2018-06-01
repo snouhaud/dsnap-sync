@@ -1,20 +1,20 @@
-# snap-sync TODO #
+# dsnap-sync TODO #
 
 ## open tasks ##
 
-- snap-sync: parallel tasks per config
-- snap-sync: introduce snapper function: important snapshots
+- dsnap-sync: parallel tasks per config
+- dsnap-sync: introduce snapper function: important snapshots
   Important snapshots have important=yes in the userdata
   let snapper cleanup/timeline mechanisms respect this
 
 ## finished tasks ##
 
-- snap-sync: refine backupdir with --interactive
-- snap-sync: visualize backup progress (using pv)
-- snap-sync: use snapper to administer target synced snapshots
-- snap-sync: introduce selectable subvolid option
-- snap-sync: refine paramteter parsing
-- snap-sync: refine functions structure
-- snap-sync: port as posix compatible
-- snap-sync: introduce selectable subvolid option
-- snap-sync: use snapper to administer target synced snapshots
+- dsnap-sync: refine backupdir with --interactive
+- dsnap-sync: visualize backup progress (using pv)
+- dsnap-sync: use snapper to administer target synced snapshots
+- dsnap-sync: introduce selectable subvolid option
+- dsnap-sync: refine paramteter parsing
+- dsnap-sync: refine functions structure
+- dsnap-sync: port as posix compatible
+- dsnap-sync: introduce selectable subvolid option
+- dsnap-sync: use snapper to administer target synced snapshots
