@@ -45,7 +45,7 @@ Either use a UUID, a SUBVOLID or a TARGET name (read 'mount point').
 ### Scheduled backups
 
 A scheduled run will take all needed parameters from config options.
-`dsnap-sync` does support systemd.timer units. Please refer to related paragraph [systemd](https://github.com/rzerres/dsnap-sync#systemd).
+`dsnap-sync` does support systemd.timer units. Please refer to related paragraph [documenting systemd](https://github.com/rzerres/dsnap-sync#systemd).
 
 ## Requirements
 g
@@ -260,5 +260,5 @@ This work is licensed under a [Creative Common License 4.0][License-CC_BY]
 
 ![Creative Common Logo][Logo-CC_BY]
 
-© 2016, 2017  James W. Barnett
+© 2016, 2017  James W. Barnett;
 © 2017 - 2018 Ralf Zerres
