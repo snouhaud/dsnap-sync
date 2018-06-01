@@ -5,28 +5,47 @@
 
 ## About
 
-`dsnap-sync` is implemented as a posix shell script (dash).
-It takes advantage of the specific functionality of a btrfs file system and
-makes it possible to backup data while sending incremental snapshots to another
-drive. It's fine to store to dives on a remote host (using ssh).
+`dsnap-sync` is designed to backup btrfs formated filesystems.
+It takes advantage of the specific snapshots functionality btrfs offers
+and combines it with managemnet functionality of snapper. 
 
-Plug in and mount any btrfs-formatted device you want your system to be
-backed up to (eg. local USB drive, remote RAID drives).
+`dsnap-sync` creates backups as btrfs-snapshots on a selectable target device.
+Plug in and mount any btrfs-formatted device to your system. Supported devices
+may be either local USB drives, but can be as well remote accessible RAID drives.
+If possible the backup process will sending incremental snapshots the target drive.
+If the snapshot will be stored on a remote host, it is secured with ssh.
 
-`dsnap-sync` will support interactive an time scheduled backup runs.
+The tool is implemented as a posix shell script, to keep the footprint small (dash).
+`dsnap-sync` will support interactive and time scheduled backup runs.
 
-* An interactive run will request you to select a mounted btrfs device.
-You can pre-select the target drive via [command line options](https://github.com/wesbarnett/dsnap-sync#options).
-Either use the UUID, the SUBVOLID or it's TARGET (read 'mount point').
+## Backup process
 
-* A scheduled run will take all needed parameters from config options.
+For a backup run, and per default `dsnap-sync` will iterate through all defined snapper
+configurations found on your source system. If you prefer to just run on a specific 
+configuration per call, you are free to select it using the 'config' option `-c`.
 
-For a backup run, `dsnap-sync` will iterate through all defined snapper configurations
-found on your source system. If you prefer to just run on a specific configuration,
-you can select this using the 'config' option `-c`. For each selected configuration
-it will use snapper to create an appropriate local snapshot.
+For each selected snapper configuration `dsnap-sync` 
 
-We do also support systemd.timer units. Please refer to related paragraph below.  
+* will create an appropriate local snapshot and update the metadata
+* will transfer the snapshot using btrfs-send to the target device
+* will create and update the snapper configuration on the target
+* will update the metadata on the target device
+
+Usualy tools will document this proccess as a disk to disk (d2d) backup.
+If possible `dsnap-sync` will levarage btrfs-send capabilities to only 
+send deltas. It will compare the snapshot data of the ongiong process with available
+snapshot data on the target device.
+
+### Interactive backups
+
+An interactive run will request you to select a mounted btrfs device.
+You can pre-select the target drive via [command line options](https://github.com/rzerres/dsnap-sync#options).
+Either use a UUID, a SUBVOLID or a TARGET name (read 'mount point').
+
+### Scheduled backups
+
+A scheduled run will take all needed parameters from config options.
+`dsnap-sync` does support systemd.timer units. Please refer to related paragraph below.
 
 ## Requirements
 
@@ -217,17 +236,18 @@ A template `dsnap-sync` is included in the package for your convenience.
 ## Contributing
 
 Help is very welcome! Feel free to fork and issue a pull request to add features or
-tackle open issues.
+tackle open issues. If you are requesting new features, please have a look at the 
+TODO list. It might be already on the agenda.
 
 ## Related projects
 
-I did fork from Wes Barnetts original work and wanted that to be merged back. 
+I did fork from Wes Barnetts original work. I was aiming merged it back. 
 Beside the fact that this version doesn't use any bashisms, Wes did let me know,
 that he doesn't have the time to review the changes appropriately to make it a merge.
 Anyone willing to do so is invided.
 
 Until that date, i will offer this fork for the public. To overcome any name clashes
-i renamed this work to dsnap-sync.
+i renamed it to dsnap-sync.
 
 
 ## License
