@@ -18,11 +18,13 @@
 
 PKGNAME = dsnap-sync
 PREFIX ?= /usr
-SNAPPER_CONFIG ?= /etc/sysconfig/snapper
+SNAPPER_CONFIG ?= /etc/default/snapper
 SNAPPER_TEMPLATES ?= /etc/snapper/config-templates
+DSNAP_SYNC_EXAMPLES = /usr/share/doc/dsnap-sync
 
 BIN_DIR = $(DESTDIR)$(PREFIX)/bin
 SYSTEMD_DIR = $(DESTDIR)$(PREFIX)/lib/systemd/system
+DOC_DIR = $(DESTDIR)$(PREFIX)/usr/share/doc/$(PKGNAME)
 
 .PHONY: install
 
@@ -30,3 +32,4 @@ install:
 	@./find_snapper_config || sed -i 's@^SNAPPER_CONFIG=.*@SNAPPER_CONFIG='$(SNAPPER_CONFIG)'@g' bin/$(PKGNAME)
 	@install -Dm755 bin/* -t $(BIN_DIR)/
 	@install -Dm644 ./$(SNAPPER_TEMPLATES)/* -t $(DESTDIR)/$(SNAPPER_TEMPLATES)/
+	@install -Dm644 ./$(DSNAP_SYNC_EXAMPLES)/* -t $(DESTDIR)/$(DOC_DIR)/
