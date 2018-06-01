@@ -30,13 +30,21 @@ We do also support systemd.timer units. Please refer to related paragraph below.
 
 ## Requirements
 
-`dsnap-sync`relies on external tools to achieve its goal.
+beside the shell itself, `dsnap-sync`relies on external tools to achieve its goal.
 At run-time their availability is checked. Following tools are are used:
 
-- snapper
 - awk
+- btrfs
+- findmnt
 - sed
+- snapper
+- tee
+- wc
+
+optionaly tools
+
 - notify-send
+- pv
 
 ## Installation
 
