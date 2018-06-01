@@ -7,12 +7,12 @@
 
 `dsnap-sync` is designed to backup btrfs formated filesystems.
 It takes advantage of the specific snapshots functionality btrfs offers
-and combines it with managemnet functionality of snapper. 
+and combines it with managemnet functionality of snapper.
 
 `dsnap-sync` creates backups as btrfs-snapshots on a selectable target device.
 Plug in and mount any btrfs-formatted device to your system. Supported devices
 may be either local USB drives, but can be as well remote accessible RAID drives.
-If possible the backup process will sending incremental snapshots the target drive.
+If possible the backup process will send incremental snapshots to the target drive.
 If the snapshot will be stored on a remote host, it is secured with ssh.
 
 The tool is implemented as a posix shell script, to keep the footprint small (dash).
@@ -21,10 +21,10 @@ The tool is implemented as a posix shell script, to keep the footprint small (da
 ## Backup process
 
 For a backup run, and per default `dsnap-sync` will iterate through all defined snapper
-configurations found on your source system. If you prefer to just run on a specific 
+configurations found on your source system. If you prefer to just run on a specific
 configuration per call, you are free to select it using the 'config' option `-c`.
 
-For each selected snapper configuration `dsnap-sync` 
+For each selected snapper configuration `dsnap-sync`
 
 * will create an appropriate local snapshot and update the metadata
 * will transfer the snapshot using btrfs-send to the target device
@@ -32,7 +32,7 @@ For each selected snapper configuration `dsnap-sync`
 * will update the metadata on the target device
 
 Usualy tools will document this proccess as a disk to disk (d2d) backup.
-If possible `dsnap-sync` will levarage btrfs-send capabilities to only 
+If possible `dsnap-sync` will levarage btrfs-send capabilities to only
 send deltas. It will compare the snapshot data of the ongiong process with available
 snapshot data on the target device.
 
@@ -45,10 +45,10 @@ Either use a UUID, a SUBVOLID or a TARGET name (read 'mount point').
 ### Scheduled backups
 
 A scheduled run will take all needed parameters from config options.
-`dsnap-sync` does support systemd.timer units. Please refer to related paragraph below.
+`dsnap-sync` does support systemd.timer units. Please refer to related paragraph [systemd](https://github.com/rzerres/dsnap-sync#systemd).
 
 ## Requirements
-
+g
 beside the shell itself, `dsnap-sync`relies on external tools to achieve its goal.
 At run-time their availability is checked. Following tools are are used:
 
@@ -165,7 +165,7 @@ A template `dsnap-sync` is included in the package for your convenience.
 
     # dsnap-sync --config data2 --remote 172.16.0.3 --target /data --noconfirm
 
-## systemd example
+## systemd
 
 ### service
 
@@ -236,12 +236,12 @@ A template `dsnap-sync` is included in the package for your convenience.
 ## Contributing
 
 Help is very welcome! Feel free to fork and issue a pull request to add features or
-tackle open issues. If you are requesting new features, please have a look at the 
+tackle open issues. If you are requesting new features, please have a look at the
 TODO list. It might be already on the agenda.
 
 ## Related projects
 
-I did fork from Wes Barnetts original work. I was aiming merged it back. 
+I did fork from Wes Barnetts original work. I was aiming merged it back.
 Beside the fact that this version doesn't use any bashisms, Wes did let me know,
 that he doesn't have the time to review the changes appropriately to make it a merge.
 Anyone willing to do so is invided.
