@@ -84,21 +84,24 @@ check_prerequisites () {
     which notify-send >/dev/null 2>&1 && { donotify=true; }
     which pv >/dev/null 2>&1 && { do_pv_cmd=true; }
 
-    if [ $(id -u) -ne 0 ] ; then printf "Script must be run as root\n" ; exit 1 ; fi
+    if [ $(id -u) -ne 0 ] ; then printf "$progname: must be run as root\n" ; exit 1 ; fi
+
+    if [ -z "$remote" ]; then
+	$ssh which sh >/dev/null 2>&1 || { printf "'remote shell' is not working!\nPlease correct your public authentication and try again.\n" && exit 1; }
+    fi
 
     if [ ! -r "$SNAPPER_CONFIG" ]; then
-	die "$SNAPPER_CONFIG does not exist."
+	die "$progname: $SNAPPER_CONFIG does not exist."
     fi
 }
 
 check_snapper_failed_ids () {
     local batch=${1:-$false}
 
-    # active, non finished snapshot backups are marked with following string
-    # "$progname backup in progress" (snapper description field)
+    # active, non finished snapshot backups are marked with a reasonable string
+    # default: $(snap_description_running -> "$progname backup in progress"
     snapper_failed_ids=$(eval snapper --config $selected_config list --type single | awk '/'"$snap_description_running"'/ {cnt++} END {print cnt}')
     if [ ${#snapper_failed_ids} -gt 0 ]; then
-	#if [ -n "$snapper_failed_ids" ]; then
         if [ "$batch" ]; then
 	    answer="yes"
 	else
@@ -1146,6 +1149,7 @@ verify_snapper_structure () {
 	    die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" "$snapper_config" "$backup_root/$snapper_config"
 	fi
 	# if changed, adapt SUBVOLUME in given config
+	# TODO: adapt SUBVOLUME in given config, since path might have changed meanwhile
 	#$ssh $(. /etc/snapper/configs/$snapper_config)
 	#get_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME"
 	#if $ssh [ "$SUBVOLUME" != \"$backup_root/$snapper_config\" ]; then
