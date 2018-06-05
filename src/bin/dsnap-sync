@@ -1207,44 +1207,63 @@ verify_snapper_structure () {
     fi
 
     # if not accessible, create backup-path
-    if $ssh [ ! -d $backup_root ]; then
+    cmd="$ssh stat --format %i $backup_root 2>/dev/null"
+    if [ -z $(eval $cmd) ]; then
 	if [ ! "$dryrun" ]; then
 	    if [ "$verbose" ]; then
-		printf "Create backup-path %s:%s ...\n" "$remote_host" "$backup_root"
+		if [ -z $remote_host ]; then
+		    printf "Create backup-path %s ...\n" "$backup_root"
+		else
+		    printf "Create backup-path %s:%s ...\n" "$remote_host" "$backup_root"
+		fi
 	    fi
-	    $ssh mkdir --mode=0700 --parents $backup_root
-	else
-	    printf "dryrun: Would create backup-path %s:%s ...\n" "$remote_host" "$backup_root"
+	    if [ $verbose ]; then
+      		printf "Create backup-path %s:%s ...\n" $remote_host $backup_root
+	    fi
+	    if [ ! $dryrun ]; then
+		$(eval $ssh mkdir --mode=0700 --parents $backup_root)
+	    else
+	       if [ -z $remote_host ]; then
+		   printf "dryrun: Would create backup-path %s ...\n" "$backup_root"
+	       else
+		   printf "dryrun: Would create backup-path %s on remote host %s ...\n" "$remote_host" "$backup_root"
+	       fi
+	    fi
 	fi
     fi
 
     # verify that we have a snapper compatible structure for selected config on target
-    if $ssh [ ! -d $backup_root/$snapper_config ]; then
+    cmd="$ssh stat --format %i $backup_root/$snapper_config 2>/dev/null"
+    if [ -z $(eval $cmd) ]; then
 	if [ "$verbose" ]; then
-	   printf "Create new snapper capable BTRFS subvolume '%s:%s' ...\n"  "$remote_host" "$backup_root/$snapper_config"
+	    if [ -z "$remote" ]; then
+		printf "Create new snapper capable BTRFS subvolume '%s' ...\n"  "$backup_root/$snapper_config"
+	    else
+		printf "Create new snapper capable BTRFS subvolume '%s' on remote host '%s' ...\n"  "$remote_host" "$backup_root/$snapper_config"
+	    fi
 	fi
 	if [ ! "$dryrun" ]; then
 	    # verify that we can use a dsnap-sync aware template
-	    if $ssh [ ! -f $SNAPPER_TEMPLATE_DIR/$snapper_snapsync_template ]; then
-	        printf "A snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
-	        printf "Did you miss to install the dsnap-sync's default snapper template on %s?\n" "$remote"
-	        die "snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
+	    cmd="$ssh stat --format %i $SNAPPER_TEMPLATE_DIR/$snapper_snapsync_template 2>/dev/null"
+	    if [ -z $(eval $cmd) ]; then
+		printf "A snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
+		printf "Did you miss to install the dsnap-sync's default snapper template on %s?\n" "$remote"
+		die "snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
 	    fi
             # create the non existing remote BTRFS subvolume
-            cmd="btrfs subvolume create $backup_root/$snapper_config"
-	    $ssh $cmd || die "Creation of BTRFS subvolume %s:%s failed.\n" "$remote_host" "$backup_root/$snapper_config"
-	    cmd="chmod 0700 $backup_root/$snapper_config"
-            $ssh $cmd || die "Changing the directory mode for %s on %s failed.\n" "$backup_root/$snapper_config" "$remote_host"
+	    cmd="$ssh btrfs subvolume create $backup_root/$snapper_config 1>/dev/null"
+	    $(eval $cmd) || die "Creation of BTRFS subvolume %s:%s failed.\n" "$remote_host" "$backup_root/$snapper_config"
+	    cmd="$ssh chmod 0700 $backup_root/$snapper_config"
+            $(eval $cmd) || die "Changing the directory mode for %s on %s failed.\n" "$backup_root/$snapper_config" "$remote_host"
 	else
 	    printf "dryrun: Would create new snapper structure in '%s:%s' ...\n"  "$backup_root/$snapper_config"
 	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_snapsync_template"
 	fi
     else
-	cmd="$ssh stat --format=%i $backup_root/$snapper_config"
+	cmd="$ssh stat --format %i $backup_root/$snapper_config 2>/dev/null"
 	if [ $(eval $cmd) -ne 256 ]; then
 	    die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" "$snapper_config" "$backup_root/$snapper_config"
 	fi
-	# if changed, adapt SUBVOLUME in given config
 	# TODO: adapt SUBVOLUME in given config, since path might have changed meanwhile
 	#$ssh $(. /etc/snapper/configs/$snapper_config)
 	#get_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME"
@@ -1256,30 +1275,35 @@ verify_snapper_structure () {
 
     # verify that we have a valid snapper config
     if [ ! "$dryrun" ]; then
-    	if $ssh [ ! -f $SNAPPER_CONFIG_DIR/$snapper_config ]; then
-		# snapper-logic will create $backup_root/$snapper_config/.snapshots
-    		cmd="snapper --config $snapper_config create-config --template $snapper_snapsync_template --fstype btrfs $backup_root/$snapper_config"
-       		$ssh $cmd || die "Creation of snapper capable config %s on %s failed.\n" "$backup_root/$snapper_config" "$remote_host"
+	cmd="$ssh stat --format %i $SNAPPER_CONFIG_DIR/$snapper_config 2>/dev/null"
+	if [ -z $(eval $cmd) ]; then
+	    # snapper will create now structure at $backup_root/$snapper_config/.snapshots
+    	    cmd="$ssh snapper --config $snapper_config create-config --template $snapper_snapsync_template --fstype btrfs $backup_root/$snapper_config"
+       	    $(eval $cmd) || die "Creation of snapper capable config %s on %s failed.\n" "$backup_root/$snapper_config" "$remote_host"
     	else
-       		# verify if SUBVOLUME needs to be updated for given snapper config
-   	 	cmd="snapper list-configs | grep $snapper_config 1>/dev/null"
-    		if $ssh [ ! $(eval $cmd) ]; then
-		    # if changed, adapt targets SUBVOLUME path
-		    if [ $verbose ]; then
-			printf "TODO: verify for SUBVOLUME update in %s\n"  "$snapper_config"
-		    fi
-		    #get_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME"
-		    #if $ssh [ "$SUBVOLUME" != \"$backup_root/$snapper_config\" ]; then
-		    #    SUBVOLUME="$backup_root/$snapper_config"
-		    #    set_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME" "$SUBVOLUME"
-		    #    cmd="btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshots"
-		    #    $ssh $cmd || die "Can't create subvolume %s in %s to hold target snapshots.\n" "$snapper_snapshots" "$backup_root/$snapper_config"
-		    #fi
+       	    # verify if SUBVOLUME needs to be updated for given snapper config
+	    cmd="$ssh snapper list-configs | awk -F '|' '/'\"^$snapper_config\"'/ {print \$1}'"
+	    #cmd="$ssh snapper list-configs | awk '/'\"^$snapper_config\"'/' | awk -F '|' '\$1 == "$snapper_config" {print \$1}'"
+	    #cmd="$ssh snapper list-configs | awk '/'\"$snapper_config\"'/'"
+    	    #ret=$(eval $cmd)
+	    #if  [ -z $ret ]; then
+	    if [ -n $(eval $cmd) ]; then
+		# if changed, adapt targets SUBVOLUME path
+		if [ $verbose ]; then
+		    printf "TODO: Check if value for key 'SUBVOLUME' needs an update in snapper config %s\n"  "$snapper_config"
 		fi
-		if $ssh [ ! -d $backup_root/$snapper_config/$snapper_snapshots ]; then
-	    		cmd="btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshots"
-	    		$ssh $cmd || die "Can't create subvolume %s in %s to hold target snapshots.\n" "$snapper_snapshots" "$backup_root/$snapper_config"
-		fi
+		#get_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME"
+		#if $ssh [ "$SUBVOLUME" != \"$backup_root/$snapper_config\" ]; then
+		#    SUBVOLUME="$backup_root/$snapper_config"
+		#    set_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME" "$SUBVOLUME"
+		#    cmd="btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshots"
+		#    $ssh $cmd || die "Can't create subvolume %s in %s to hold target snapshots.\n" "$snapper_snapshots" "$backup_root/$snapper_config"
+		#fi
+	    fi
+	    cmd="$ssh stat --format %i $backup_root/$snapper_config/$snapper_snapshots 2>/dev/null"
+	    if [ $(eval $cmd) -ne 256 ]; then
+		die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" "$snapper_config" "$backup_root/$snapper_config"
+	    fi
 	fi
     else
 	printf "dryrun: Would check/create for valid snapper config %s  ...\n" \
@@ -1288,11 +1312,12 @@ verify_snapper_structure () {
 
     # verify that target snapshot id can take the new snapshot data
     if [ ! "$dryrun" ]; then
-	if $ssh [ ! -d $backup_root/$snapper_config/$snapper_snapshots/$snapper_id ]; then
+	cmd="$ssh stat --format %i $backup_root/$snapper_config/$snapper_snapshots/$snapper_id 2>/dev/null"
+	if [ -z $(eval $cmd) ]; then
 	    if [ "$verbose" ]; then
 		printf "Create path %s to store target snapshot.\n" "$backup_root/$snapper_config/$snapper_snapshots/$snapper_id"
 	    fi
-	    $ssh mkdir --mode=0700 $backup_root/$snapper_config/$snapper_snapshots/$snapper_id
+	    $(eval $ssh mkdir --mode=0700 $backup_root/$snapper_config/$snapper_snapshots/$snapper_id)
 	else
 	    if [ -z "$remote" ]; then
 		printf "Cancel Snapshot creation: Former snapshot with id '%s' already exist in '%s'\n" "$snapper_id" "$backup_root/$snapper_config/$snapper_snapshots"
