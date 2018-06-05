@@ -63,6 +63,8 @@ selected_target='none'
 selected_subvol='none'
 snapper_snapshots=".snapshots"  # hardcoded in snapper
 snapper_snapsync_template="dsnap-sync"
+snapper_config_type='none'
+snapper_config_postfix="."`hostname`
 
 ###
 # functions
@@ -116,6 +118,54 @@ check_snapper_failed_ids () {
 	    $(eval $cmd $(eval $cmd2))
 	fi
     fi
+}
+
+set_snapper_target_config () {
+    local snapper_config=$1
+    local snapper_config_tpye='none'
+    local key
+    local value
+
+    if [ $verbose ]; then
+	printf "Verify snapper configuration type for %s...\n" $snapper_config
+    fi
+
+    # WIP -> exit now
+    # Patch snapper to parse for new pairs:  CONFIG_TYPE="child | root"; CONFIG_PARENT="<string>"
+    ##config_type=$(eval snapper --config $1 get-config | awk '/'"CONFIG_PARENT=$snap_description_running"'/ {cnt++} END {print cnt}')
+    # for now, we cut an parse ourself
+    IFS="="
+    while read -r key value
+    do
+	if [ "$key" = "CONFIG_TYPE" ]; then
+	    snapper_config_type=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+	    break
+	fi
+    done < $SNAPPER_CONFIG_DIR/$snapper_config
+
+    case $snapper_config_type in
+	child|Child)
+	    # d2d2d backup
+	    snapper_config_type="child2"
+	    snapper_target_config=d2d-$snapper_config
+	    ;;
+	parent|Parent)
+	    # d2d backup
+	    snapper_config_type="parent2disk"
+	    snapper_target_config=$snapper_config
+	    ;;
+	*)
+	    # d2s backup (default)
+	    snapper_config_type="parent2disk"
+	    snapper_target_config=snap-$snapper_config
+	    ;;
+    esac
+
+    if [ -n $snapper_config_postfix ]; then
+	snapper_target_config=${snapper_target_config}${snapper_config_postfix}
+    fi
+    printf "Snappper configuration type:   '%s'\n" $snapper_config_type
+    printf "Snappper target configuration: '%s'\n" $snapper_target_config
 }
 
 die () {
@@ -283,6 +333,10 @@ parse_params () {
 		fi
 		shift 2
 		;;
+            --config-postfix)
+                    snapper_config_postfix="$2"
+		shift 2
+		;;
             --description-finished)
 		shift
 		snap_description_finished="${*}"
@@ -374,6 +428,10 @@ parse_params () {
 		else
                     selected_config="${1#*=}"
 		fi
+		shift
+                ;;
+	    --config-postfix=*)
+                    snapper_config_postfix="${1#*=}"
 		shift
                 ;;
             --description-finished=*)
@@ -478,6 +536,7 @@ parse_params () {
 	printf "  disk TARGET:      '%s'\n" "$target_cmdline"
 	printf "  disk SUBVOLID:    '%s'\n" "$subvolid_cmdline"
 	printf "  disk Backupdir:   '%s'\n" "$backupdir_cmdline"
+	printf "  config postfix:   '%s'\n" "$snapper_config_postfix"
 	printf "  remote host:      '%s'\n" "$remote"
 	printf "  ssh options:      '%s'\n" "$ssh"
 
@@ -628,9 +687,14 @@ run_config () {
 	    snapper_new_id="<new_snapper_id>"
 	fi
 
+	# Snapshot types: d2d and cloning
+	# d2d:   1st stage snapshots: CHILD_CONFIG="false" or missing
+	# clone: 2nd stage snapshots: CHILD_CONFIG="true" PARENT_CONFIG="<snapper config name>"
+	# parse selected_config and return with $snapper_target_config set appropriately
+	set_snapper_target_config $selected_config
+
 	# if we want to use snapper on the target to supervise the synced snapshots
 	# the backup_location needs to be in a subvol ".snapshots" inside $selected_config (hardcoded in snapper)
-	snapper_target_config="snap-$selected_config"
 	snapper_target_snapshot=$backup_root/$snapper_target_config/.snapshots/$snapper_new_id
 	if [ -z "$remote" ]; then
 	    printf "Will backup %s to %s\n" "$snapper_new_snapshot" "$snapper_target_snapshot/snapshot"
@@ -1082,6 +1146,7 @@ Options:
  -c, --config <config>       Specify the snapper configuration to use. Otherwise will perform for each snapper
                              configuration. Can list multiple configurations within quotes, space-separated
                              (e.g. -c "root home").
+     --config-postfix <name> Specify a postfix to be appended the the destination snapper config name.
  -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
      --batch                 directory name on first backup"
      --nonotify              Disable graphical notification (via dbus)
