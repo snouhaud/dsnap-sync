@@ -947,7 +947,7 @@ run_finalize () {
 	snapper_target_config=$(eval echo \$snapper_target_config_$i)
 	snapper_target_snapshot=$(eval echo \$snapper_target_snapshot_$i)
 
-	# It's important not to change the values of the key/value pairs ($userdata)
+	# It's important not to change the values of the snapper key/value pairs ($userdata)
 	# which is stored in snappers info.xml file of the source snapshot.
 	# This is how we find the parent.
 
@@ -958,41 +958,44 @@ run_finalize () {
 	target_userdata="subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host"
 
 	# Tag new snapshots key/value parameter
+	if [ "$verbose" ]; then
+	    printf "Tagging snapper metadata for config '%s' on source.\n" "$selected_config"
+	    #fi
+	fi
 	if [ ! "$dryrun" ]; then
-	    # source snapshot
-	    if [ "$verbose" ]; then
-		printf "Tagging snapper metadata on source for configuration '%s' ...\n" "$selected_config"
-	    fi
-	    cmd="snapper --verbose --config \"$selected_config\" modify --description \"$snap_description_synced\" --userdata \"$userdata\" \"$snapper_new_id\""
-	    ret=$(eval $cmd)
-	    #printf "return: '%s'\n" "$ret"
-	    sync
-
 	    # target snapshot
-	    if [ "$verbose" ]; then
-		printf "Tagging snapper metadata on target for configuration '%s' ...\n" "$selected_config"
-	    fi
+	    # 1) wait for target snapshot to show up in snapper list
+	    #    find "$snapper_new_id" -> marked as "$snap_descrition_running"
+	    # 2) toggle metadata -> mark as "$snap_description_finished", reference "$target_userdata" (subvolid, uuid, host)
+
+	    # !!! ugly hack !!!: wait for snapper to list target snapshot in database.
+	    # Problem: how to trigger that database is synced? -> a feature request is send to snapper upstream source
+	    # Solution: right now, it is no-deterministic, when the entry in the listing will show up .... wait max 10 min ...
 	    ii=1
 	    ii_max=20
-	    cmd="snapper --verbose --config \"$snapper_target_config\" list --type single | awk '/'\"$snap_description_running\"'/' | awk -F '|' '\$1 == "$snapper_new_id" {print \$1}'"
-	    # !!! ugly hack !!!: wait for snapper to list target snapshot in database. how to trigger database resync?
-	    # it is not deterministic, when the entry in the listing will show up .... for now, wait max 10 min ...
+	    cmd="$ssh snapper --verbose --config $snapper_target_config list --type single | awk ' \"$snap_description_running\" ' | awk -F '|' ' \$1 == "$snapper_new_id" {print \$1} ' "
+	    if [ "$verbose" ]; then
+		printf "Identify snapper id '%s' on target for configuration '%s' ...\n" "$snapper_new_id" "$snapper_config"
+	    fi
 	    while [ "$ii" -le  "$ii_max" ]; do
-		if [ -n "$remote" ]; then
-		    ret=$($ssh $cmd)
-		else
-		    ret=$(eval $cmd)
+		# WIP: verbose
+		if [ "$verbose" ]; then
+		    printf "calling: '%s'\n" "$cmd"
 		fi
-		#printf "return: '%s'\n" "$ret"
+
+		ret=$(eval $cmd)
+		printf "return: '%s'\n" "$ret"
 		if [ -n "$ret" ]; then
 		    if [ "$ret" -eq "$snapper_new_id" ]; then
-			cmd="snapper --verbose --config \"$snapper_target_config\" modify --description \"$snap_description_finished\" --userdata \"$target_userdata\" \"$snapper_new_id\""
-			if [ -n "$remote" ]; then
-			    ret=$($ssh "$cmd")
-			else
-			    ret=$(eval $cmd)
+			cmd="$ssh snapper --verbose --config \"$snapper_target_config\" modify --description \"$snap_description_finished\" --userdata \"$target_userdata\" \"$snapper_new_id\""
+			# WIP: verbose
+			if [ "$verbose" ]; then
+			    printf "Update metadata for snapper id '%s' on target for configuration '%s' ...\n" "$snapper_new_id" "$snapper_config"
+			    printf "calling: '%s'\n" "$cmd"
 			fi
-			#printf "return: '%s'\n" "$ret"
+
+			ret=$(eval $cmd)
+			printf "return: '%s'\n" "$ret"
 			break
 		    fi
 		fi
@@ -1002,10 +1005,19 @@ run_finalize () {
 		sleep 30
 		ii=$(($ii + 1))
 	    done
+
+	    # source snapshot
+	    cmd="snapper --verbose --config \"$selected_config\" modify --description \"$snap_description_synced\" --userdata '\"$userdata\"' \"$snapper_new_id\""
+	    if [ "$verbose" ]; then
+		printf "Tagging snapper metadata on source for configuration '%s' ...\n" "$selected_config"
+		printf "calling: '%s'\n" "$cmd"
+	    fi
+	    eval $cmd
+	    sync
 	else
-	    cmd="snapper --verbose --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_new_id"
-	    printf "dryrun: %s\n" "$cmd"
 	    cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata $snapper_new_id"
+	    printf "dryrun: %s\n" "$cmd"
+	    cmd="snapper --verbose --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_new_id"
 	    printf "dryrun: %s\n" "$cmd"
 	fi
 
