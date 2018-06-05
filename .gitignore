@@ -2,6 +2,7 @@
 *.bak
 AUR/*
 PKGBUILD
+debian
 pkg/*
 *.tar*
 *.gz
