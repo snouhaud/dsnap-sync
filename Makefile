@@ -24,7 +24,7 @@ DSNAP_SYNC_EXAMPLES = /usr/share/doc/dsnap-sync
 
 BIN_DIR = $(DESTDIR)$(PREFIX)/bin
 SYSTEMD_DIR = $(DESTDIR)$(PREFIX)/lib/systemd/system
-DOC_DIR = $(DESTDIR)$(PREFIX)/usr/share/doc/$(PKGNAME)
+DOC_DIR = $(DESTDIR)$(PREFIX)/share/doc/$(PKGNAME)
 
 .PHONY: install
 
