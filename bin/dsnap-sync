@@ -50,6 +50,7 @@ BTRFS_PIPE=$TMPDIR_PIPE/btrfs.out
 exec 3>$PIPE 4>$BTRFS_PIPE
 
 # global variables
+args=
 donotify=0
 answer=no
 disk_count=-1
@@ -125,6 +126,23 @@ check_snapper_failed_ids () {
 	    cmd="snapper --config \"$selected_config\" delete "
 	    $(eval $cmd $(eval $cmd2))
 	fi
+    fi
+}
+
+quote_args () {
+    # quote command in ssh call to prevent remote side from expanding any arguments
+    # using dash's buildin printf
+
+    args=
+    if [ $# -gt 0 ]; then
+	# no need to make COMMAND an array - ssh will merge it anyway
+	COMMAND=
+	while [ $# -gt 0 ]; do
+	    arg=$(printf "%s" "$1")
+	    COMMAND="${COMMAND}${arg} "
+	    shift
+	done
+	args="${args}${COMMAND}"
     fi
 }
 
