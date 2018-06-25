@@ -114,8 +114,12 @@ check_snapper_failed_ids () {
     local batch=${1:-$false}
 
     # active, non finished snapshot backups are marked with a reasonable string
-    # default: $(snap_description_running -> "$progname backup in progress"
+    # default: $(snap_description_running -> "$progname backup in progress" (userdata: host=$source)
     snapper_failed_ids=$(eval snapper --config $selected_config list --type single | awk '/'"$snap_description_running"'/ {cnt++} END {print cnt}')
+    #snapper_failed_ids="snapper --config $selected_config list --type single \
+    #	    | awk '/'"$snap_description_running"'/' \
+    # 	    | awk ' /'host='"$remote"'/ {cnt++} END {print cnt}'"
+
     if [ ${#snapper_failed_ids} -gt 0 ]; then
         if [ "$batch" ]; then
 	    answer="yes"
@@ -127,6 +131,9 @@ check_snapper_failed_ids () {
 	fi
 	if [ "$answer" = "yes" ]; then
 	    cmd2="snapper --config \"$selected_config\" list | awk '/'\"$snap_description_running\"'/ {print \$3}'"
+	    #cmd2="snapper --config \"$selected_config\" list \
+	    #		 | awk '/'\"$snap_description_running\"'/' \
+	    #		 | awk '/'host='\"$remote\"'/  {print \$3}'"
 	    cmd="snapper --config \"$selected_config\" delete "
 	    $(eval $cmd $(eval $cmd2))
 	fi
@@ -702,7 +709,11 @@ run_config () {
 		printf "Last syncronized Snapshot-Path for '%s': %s\n" "$selected_config" "$snapper_sync_snapshot"
 	    fi
 
-	    backupdir=$(snapper --config "$selected_config" list --type single | awk -F "|" '/'"$snap_description_synced"'/' | awk -F "|" '/subvolid='"$selected_subvol"'/, /uuid='"$selected_uuid"'/  {print $5}' | awk -F "," '/backupdir/ {print $1}' | awk -F"=" '{print $2}')
+	    backupdir=$(snapper --config "$selected_config" list --type single \
+			    | awk -F "|" '/'"$snap_description_synced"'/' \
+			    | awk -F "|" '/subvolid='"$selected_subvol"'/, /uuid='"$selected_uuid"'/  {print $5}' \
+			    | awk -F "," '/backupdir/ {print $1}' \
+			    | awk -F"=" '{print $2}')
 	    if [ "$interactive" ]; then
 		if [ -z "$backupdir"]; then
 		    answer=yes
@@ -928,7 +939,7 @@ run_backup () {
 		    eval $cmd 1>/dev/null
 		    if [ "$?" -gt 0 ]; then
 			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}" "cat $BTRFS_PIPE"
-			# die "btrfs pipe error."
+			die "btrfs pipe error."
 		    fi
 		else
 		    printf "dryrun: '%s'" "cmd"
@@ -1152,16 +1163,19 @@ run_finalize () {
 	    fi
 	    sync
 
-	    cmd="snapper --config $selected_config modify \
-		 --description \"$snap_description_finished\" \
-		 $snapper_sync_id"
+	    if [ ${#snapper_sync_id} -gt 0 ]; then
+		cmd="snapper --config $selected_config modify \
+			     --description \"$snap_description_finished\" \
+			     $snapper_sync_id"
 
-	    if [ $verbose -ge 2 ]; then
-		printf "${YELLOW}Tagging snapper metadata${NO_COLOR} for snapper sync id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapper_sync_id" "$selected_config"
-		printf "calling: '%s'\n" "$cmd"
+		if [ $verbose -ge 2 ]; then
+		    printf "${YELLOW}Tagging snapper metadata${NO_COLOR} for snapper sync id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+			   "$snapper_sync_id" "$selected_config"
+		    printf "calling: '%s'\n" "$cmd"
+		fi
+		ret=$(eval "$cmd")
+		snapper_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
 	    fi
-	    ret=$(eval "$cmd")
 	else
 	    # dry-run output
 	    cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata --cleanup-algorithm $snap_cleanup_algorithm $snapper_new_id"
@@ -1402,7 +1416,7 @@ verify_snapper_structure () {
 	fi
     fi
 
-    # verify that we have a snapper compatible structure for selected config on target
+    # verify that we have a snapper compatible structure for selected config on target (a btrfs subvolume)
     cmd="$ssh stat --format %i $backup_root/$snapper_config 2>/dev/null"
     if [ -z $(eval $cmd) ]; then
 	if [ $verbose -ge 1 ]; then
@@ -1410,7 +1424,7 @@ verify_snapper_structure () {
 		printf "${MAGENTA}Create${NO_COLOR} new snapper capable BTRFS subvolume ${MAGENTA}'%s'${NO_COLOR} ...\n"  \
 		       "$backup_root/$snapper_config"
 	    else
-		printf "Create new snapper capable BTRFS subvolume '%s' on remote host '%s' ...\n" \
+		printf "${MAGENTA}Create${NO_COLOR} new snapper capable BTRFS subvolume '%s' on ${MAGENTA}remote host '%s'${NO_COLOR} ...\n" \
 		       "$remote_host" "$backup_root/$snapper_config"
 	    fi
 	fi
@@ -1433,7 +1447,8 @@ verify_snapper_structure () {
             $(eval $cmd) || die "Changing the directory mode for %s on %s failed.\n" \
 				"$backup_root/$snapper_config" "$remote_host"
 
-	    # create the non exiting remote snapshotcmd="$ssh btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshot 1>/dev/null"
+	    # create the non existing remote snapshot
+	    cmd="$ssh btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshot 1>/dev/null"
 	    $(eval $cmd) || \
 		die "Creation of BTRFS subvolume $remote_host: $backup_root/$snapper_config failed."
 	    cmd="$ssh chmod 0700 $backup_root/$snapper_config 1>/dev/null"
