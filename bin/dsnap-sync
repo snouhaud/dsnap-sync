@@ -100,7 +100,9 @@ check_prerequisites () {
     if [ $(id -u) -ne 0 ] ; then printf "$progname: must be run as root\n" ; exit 1 ; fi
 
     if [ -z "$remote" ]; then
-	$ssh which sh >/dev/null 2>&1 || { printf "'remote shell' is not working!\nPlease correct your public authentication and try again.\n" && exit 1; }
+	$ssh which sh >/dev/null 2>&1 || \
+	    { printf "'remote shell' is not working!\n \
+	      Please correct your public authentication and try again.\n" && exit 1; }
     fi
 
     if [ ! -r "$SNAPPER_CONFIG" ]; then
@@ -119,7 +121,7 @@ check_snapper_failed_ids () {
 	    answer="yes"
 	else
 	    #printf "\nNOTE: Found %s previous failed sync runs for '%s'.\n" "${snapper_failed_ids}" "$selected_config" | tee $PIPE
-	    printf "\nNOTE: Found %s previous failed sync runs for '%s'.\n" "${snapper_failed_ids}" "$selected_config"
+	    printf "${MAGENTA}Found %s previous failed sync runs for '%s'${NO_COLOR}\n" "${snapper_failed_ids}" "$selected_config"
 	    answer=no
 	    get_answer_yes_no "Delete failed backup snapshots [y/N]? " "$answer"
 	fi
@@ -559,6 +561,7 @@ parse_params () {
     . $SNAPPER_CONFIG
     selected_configs=${selected_configs:-$SNAPPER_CONFIGS}
 
+    # message-text used for snapper fields
     snap_description_finished=${snap_description_finished:-"dsnap-sync backup"}
     snap_description_running=${snap_description_running:-"dsnap-sync in progress"}
     snap_description_synced=${snap_description_synced:-"dsnap-sync last incremental"}
@@ -620,7 +623,6 @@ parse_params () {
 }
 
 run_config () {
-
     printf "${BLUE}Verify configuration...${NO_COLOR}\n"
 
     SNAP_SYNC_EXCLUDE=no
