@@ -50,7 +50,7 @@ BTRFS_PIPE=$TMPDIR_PIPE/btrfs.out
 exec 3>$PIPE 4>$BTRFS_PIPE
 
 # global variables
-donotify=false
+donotify=0
 answer=no
 disk_count=-1
 disk_uuid_match_count=0
@@ -82,7 +82,7 @@ check_prerequisites () {
     which wc >/dev/null 2>&1 || { printf "'wc' is not installed." && exit 1; }
 
     # optional binaries:
-    which notify-send >/dev/null 2>&1 && { donotify=true; }
+    which notify-send >/dev/null 2>&1 && { donotify=1; }
     which pv >/dev/null 2>&1 && { do_pv_cmd=true; }
 
     if [ $(id -u) -ne 0 ] ; then printf "$progname: must be run as root\n" ; exit 1 ; fi
@@ -295,7 +295,7 @@ get_disk_infos () {
 
 notify () {
     # estimation: batch calls should just log
-    if [ "$donotify" = "true" ]; then
+    if [ $donotify -gt 0 ]; then
 	for u in $(users | sed 's/ /\n/' | sort -u); do
             sudo -u $u DISPLAY=:0 \
 		 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(sudo -u $u id -u)/bus \
@@ -310,7 +310,7 @@ notify_info () {
     notify "$1" "$2" "information"
 }
 
-notify_error() {
+notify_error () {
     notify "$1" "$2" "error"
 }
 
@@ -375,17 +375,17 @@ parse_params () {
 		;;
             -i|--interactive)
 		interactive=1
-		donotify=true
+		donotify=1
 		shift
 		;;
             -n|--noconfirm|--batch)
 		batch=1
 		do_pv_cmd=false
-		donotify=false
+		donotify=0
 		shift
 		;;
 	    --nonotify)
-		donotify=false
+		donotify=0
 		shift 1
 		;;
 	    --nopv)
@@ -549,7 +549,7 @@ parse_params () {
 
 	if [ "$verbose" ]; then snap_sync_options="verbose=true"; fi
 	if [ "$dryrun" ]; then snap_sync_options="${snap_sync_options} dry-run=true"; fi
-	if [ "$nonotify" ]; then snap_sync_options="${snap_sync_options} donotify=false"; fi
+	if [ "$nonotify" ]; then snap_sync_options="${snap_sync_options} donotify=0"; fi
 	if [ "$batch" ]; then
             snap_sync_options="${snap_sync_options} batch=true do_pv_cmd=false"
         else
@@ -772,7 +772,7 @@ run_backup () {
 
 	cont_backup=$(eval echo \$snapper_activate_$i)
 	if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
-	    if [ "$donotify" ]; then
+	    if [ $donotify -gt 0 ]; then
 		notify_info "Backup in progress" "NOTE: Skipping '$selected_config' configuration."
             fi
 	    continue
@@ -934,13 +934,13 @@ run_finalize () {
 
 	cont_backup=$(eval echo \$snapper_activate_$i)
 	if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
-	    if [ "$donotify" ]; then
+	    if [ $donotify -gt 0 ]; then
 	       notify_info "Finalize backup" "NOTE: Skipping '$selected_config' configuration."
             fi
 	    continue
 	fi
 
-	if [ "$donotify" ]; then
+	if [ $donotify -gt 0 ]; then
 	    notify_info "Finalize backup" "Cleanup tasks for configuration '$selected_config'."
 	fi
 	printf "\n"
@@ -1371,7 +1371,7 @@ parse_params $@
 # read mounted BTRFS structures
 get_disk_infos
 
-if [ "$donotify" ]; then
+if [ $donotify -gt 0 ]; then
     if [ "$target_cmdline" != "none" ]; then
 	if [ -z "$remote" ]; then
             notify_info "Backup started" "Starting backups to '$target_cmdline' ..."
@@ -1418,7 +1418,7 @@ exec 3>&-
 # cleanup
 run_cleanup
 
-if [ "$donotify" ]; then
+if [ $donotify -gt 0 ]; then
     if [ "$uuid_cmdline" != "none" ]; then
 	notify_info "Finished" "Backups to $uuid_cmdline complete!"
     else
