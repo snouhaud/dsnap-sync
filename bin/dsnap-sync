@@ -885,7 +885,7 @@ run_backup () {
 
 	# settings for interactive progress status
 	if [ "$do_pv_cmd" = "true" ]; then
-	    pv_options="--delay-start 2  --interval 5 --timer --rate --bytes --fineta --buffer-percent --progress"
+	    pv_options="--delay-start 2  --interval 5 --timer --rate --bytes --fineta --no-splice --buffer-percent --progress"
 	    cmd_pv="pv $pv_options --size $snapper_target_snapshot_size |"
 	    #cmd_pv="pv $pv_options --size $snapper_target_snapshot_size | dialog --gauge \"$progname: Progress for config '$selected_config'\" 6 85 |"
 	else
