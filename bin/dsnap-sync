@@ -114,8 +114,12 @@ check_snapper_failed_ids () {
     local batch=${1:-$false}
 
     # active, non finished snapshot backups are marked with a reasonable string
-    # default: $(snap_description_running -> "$progname backup in progress"
+    # default: $(snap_description_running -> "$progname backup in progress" (userdata: host=$source)
     snapper_failed_ids=$(eval snapper --config $selected_config list --type single | awk '/'"$snap_description_running"'/ {cnt++} END {print cnt}')
+    #snapper_failed_ids="snapper --config $selected_config list --type single \
+    #	    | awk '/'"$snap_description_running"'/' \
+    # 	    | awk ' /'host='"$remote"'/ {cnt++} END {print cnt}'"
+
     if [ ${#snapper_failed_ids} -gt 0 ]; then
         if [ "$batch" ]; then
 	    answer="yes"
@@ -127,6 +131,9 @@ check_snapper_failed_ids () {
 	fi
 	if [ "$answer" = "yes" ]; then
 	    cmd2="snapper --config \"$selected_config\" list | awk '/'\"$snap_description_running\"'/ {print \$3}'"
+	    #cmd2="snapper --config \"$selected_config\" list \
+	    #		 | awk '/'\"$snap_description_running\"'/' \
+	    #		 | awk '/'host='\"$remote\"'/  {print \$3}'"
 	    cmd="snapper --config \"$selected_config\" delete "
 	    $(eval $cmd $(eval $cmd2))
 	fi
@@ -702,7 +709,11 @@ run_config () {
 		printf "Last syncronized Snapshot-Path for '%s': %s\n" "$selected_config" "$snapper_sync_snapshot"
 	    fi
 
-	    backupdir=$(snapper --config "$selected_config" list --type single | awk -F "|" '/'"$snap_description_synced"'/' | awk -F "|" '/subvolid='"$selected_subvol"'/, /uuid='"$selected_uuid"'/  {print $5}' | awk -F "," '/backupdir/ {print $1}' | awk -F"=" '{print $2}')
+	    backupdir=$(snapper --config "$selected_config" list --type single \
+			    | awk -F "|" '/'"$snap_description_synced"'/' \
+			    | awk -F "|" '/subvolid='"$selected_subvol"'/, /uuid='"$selected_uuid"'/  {print $5}' \
+			    | awk -F "," '/backupdir/ {print $1}' \
+			    | awk -F"=" '{print $2}')
 	    if [ "$interactive" ]; then
 		if [ -z "$backupdir"]; then
 		    answer=yes
