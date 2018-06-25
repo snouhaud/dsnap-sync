@@ -1034,7 +1034,7 @@ run_finalize () {
 	# This is how we find the parent.
 
 	src_host=$(eval cat /etc/hostname)
-	src_uuid=$(eval findmnt --noheadings --output UUID $SUBVOLUME)
+	src_uuid=$(eval findmnt --noheadings --output UUID --target $SUBVOLUME)
 	src_subvolid=$(eval findmnt --noheadings --output OPTIONS $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
 	userdata="backupdir=$backup_dir, subvolid=$selected_subvol, uuid=$selected_uuid, host=$remote"
 	target_userdata="subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host"
