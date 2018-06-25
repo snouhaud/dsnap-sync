@@ -64,7 +64,9 @@ selected_subvol='none'
 snapper_snapshots=".snapshots"  # hardcoded in snapper
 snapper_snapsync_template="dsnap-sync"
 snapper_config_type='none'
-snapper_config_postfix="."`hostname`
+#snapper_config_postfix="."`hostname`
+snapper_config_postfix=
+snap_cleanup_algorithm="timeline"
 verbose=0
 
 # ascii color
@@ -1285,7 +1287,7 @@ Options:
  -c, --config <config>       Specify the snapper configuration to use. Otherwise will perform for each snapper
                              configuration. Can list multiple configurations within quotes, space-separated
                              (e.g. -c "root home").
-     --config-postfix <name> Specify a postfix to be appended the the destination snapper config name.
+     --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name.
  -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
      --batch                 directory name on first backup"
      --nonotify              Disable graphical notification (via dbus)
