@@ -1036,8 +1036,6 @@ run_finalize () {
 	src_host=$(eval cat /etc/hostname)
 	src_uuid=$(eval findmnt --noheadings --output UUID --target $SUBVOLUME)
 	src_subvolid=$(eval findmnt --noheadings --output OPTIONS $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
-	userdata="backupdir=$backup_dir, subvolid=$selected_subvol, uuid=$selected_uuid, host=$remote"
-	target_userdata="subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host"
 
 	# Tag new snapshots key/value parameter
 	if [ $verbose -ge 1 ]; then
@@ -1051,12 +1049,22 @@ run_finalize () {
 
 	    # !!! ugly hack !!!: wait for snapper to list target snapshot in database.
 	    # Problem: how to trigger that database is synced? -> a feature request is send to snapper upstream source
-	    # Solution: right now, it is no-deterministic, when the entry in the listing will show up .... wait max 10 min ...
-	    ii=1
-	    ii_max=20
-	    cmd="$ssh snapper --verbose --config $snapper_target_config list --type single | awk ' \"$snap_description_running\" ' | awk -F '|' ' \$1 == "$snapper_new_id" {print \$1} ' "
-	    if [ "$verbose" ]; then
-		printf "Identify snapper id '%s' on target for configuration '%s' ...\n" "$snapper_new_id" "$snapper_config"
+	    # Solution: right now, it is no-deterministic, when the entry in the listing will show up
+	    #           -> wait ii_max * ii_sleep seconds ( 20*15 = 300 -> 5 Min)
+	    local ii=1
+	    local ii_max=20
+	    local ii_sleep=15
+
+	    # Solution2: kill running snapperd
+	    #            -> will restart and sync
+	    $(eval $ssh killall -SIGTERM snapperd)
+	    #printf "Killall '%s'\n" "$?"
+
+	    # construct snapper match command
+	    cmd="$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
+	    	      | awk ' /'\"$snap_description_running\"'/ ' \
+		      | awk -F '|' ' \$1 == $snapper_new_id {print \$1} ' "
+
 
 	    if [ $verbose -ge 2 ]; then
 		printf "${YELLOW}Identify snapper id ${GREEN}'%s'${YELLOW} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
@@ -1075,20 +1083,35 @@ run_finalize () {
 		if [ $? -eq 0 ]; then
 		    #printf "return: snapper_new_id '%s'\n" "$ret"
 		    if [ "$ret" -eq "$snapper_new_id" ]; then
-			cmd="$ssh snapper --verbose --config \"$snapper_target_config\" modify --description \"$snap_description_finished\" --userdata \"$target_userdata\" \"$snapper_new_id\""
-			    printf "calling: '%s'\n" "$cmd"
 			# got snapshot as $snapper_new_id
 			if [ $verbose -ge 2 ]; then
 			    printf "${YELLOW}Found${NO_COLOR} snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR}\n" \
 				   "$snapper_new_id" "$snapper_target_config"
 			fi
 
-			ret=$(eval $cmd)
-			printf "return: '%s'\n" "$ret"
  			if [ $verbose -ge 2 ]; then
 			    printf "${YELLOW}Tagging metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
 				   "$snapper_new_id" "$snapper_target_config"
 			    #printf "calling: '%s'\n" "$cmd"
+			fi
+
+			# call command
+			if [ $remote ]; then
+			    # !! working !!
+			    ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
+			    	   --description \\\'$snap_description_finished\\\' \
+			    	   --userdata \\\'subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host\\\' \
+			    	   --cleanup-algorithm \'timeline\' \
+			    	   \'$snapper_new_id\')
+			else
+			    ret=$(snapper --config \"$snapper_target_config\" modify  \
+				   --description \\\'$snap_description_finished\\\' \
+				   --userdata \\\'subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host\\\' \
+				   --cleanup-algorithm \"timeline\" \
+				   \"$snapper_new_id\")
+			fi
+			if [ $verbose -ge 2 ]; then
+			    printf "return: '%s'\n" "$ret"
 			fi
 			break
 		    fi
@@ -1097,39 +1120,67 @@ run_finalize () {
 		    printf "%s/%s: ${RED}Waiting another '%s' seconds${NO_COLOR} for snappers database update on target ...\n" \
 			   "$ii" "$ii_max" "$ii_sleep"
 		fi
-		sleep 30
+		sleep $ii_sleep
 		ii=$(($ii + 1))
 	    done
 
 	    # source snapshot
-	    cmd="snapper --verbose --config \"$selected_config\" modify --description \"$snap_description_synced\" --userdata '\"$userdata\"' \"$snapper_new_id\""
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}Tagging source ...${NO_COLOR}\n"
 	    fi
+
+	    cmd="snapper --config $selected_config modify \
+		 --description \"$snap_description_synced\" \
+		 --userdata \"backupdir=$backup_dir, subvolid=$selected_subvol, uuid=$selected_uuid, host=$remote\" \
+		 --cleanup-algorithm \"timeline\" \
+		 $snapper_new_id"
+
 	    if [ $verbose -ge 2 ]; then
 		printf "${YELLOW}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
 		       "$snapper_new_id" "$selected_config"
 		printf "calling: '%s'\n" "$cmd"
 	    fi
-	    eval $cmd
-	    #ret=$(eval $cmd)
-	    #printf "return: '%s'\n" "$ret"
+	    ret=$(eval "$cmd")
+	    # !!working!!
+	    #snapper --config $snapper_config modify  \
+	    #		  --description \"$snap_description_synced\" \
+	    #		  --cleanup-algorithm \"timeline\" \
+	    #		  --userdata "\'backupdir=$backup_dir, subvolid=$selected_subvol, uuid=$selected_uuid, host=$remote\'" \
+	    #		  $snapper_new_id
+	    if [ $verbose -ge 2 ]; then
+		printf "return: '%s'\n" "$?"
+	    fi
 	    sync
 
+	    cmd="snapper --config $selected_config modify \
+		 --description \"$snap_description_finished\" \
+		 $snapper_sync_id"
+
+	    if [ $verbose -ge 2 ]; then
+		printf "${YELLOW}Tagging snapper metadata${NO_COLOR} for snapper sync id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+		       "$snapper_sync_id" "$selected_config"
+		printf "calling: '%s'\n" "$cmd"
+	    fi
+	    ret=$(eval "$cmd")
 	else
-	    cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata $snapper_new_id"
+	    # dry-run output
+	    cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata --cleanup-algorithm $snap_cleanup_algorithm $snapper_new_id"
 	    printf "dryrun: %s\n" "$cmd"
-	    cmd="snapper --verbose --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_new_id"
+	    cmd="snapper --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_new_id"
+	    printf "dryrun: %s\n" "$cmd"
+	    cmd="snapper --config $selected_config modify --description $snap_description_finished $snapper_sync_id"
 	    printf "dryrun: %s\n" "$cmd"
 	fi
 
-	# Cleanup synced source snapshots
-	if [ -n "$snapper_sync_id" ]; then
-	    cmd="snapper --verbose --config \"$snapper_config\" modify --description \"$snap_description_finished\" --cleanup timeline  \"$snapper_sync_id\""
-	    ret=$(eval $cmd)
-	    #printf "return: '%s'\n" "$ret"
-	    sync
-	fi
+#	# Cleanup synced source snapshots
+#	if [ -n "$snapper_sync_id" ]; then
+#	    cmd="snapper --verbose --config \"$snapper_config\" modify \
+#		       --description \"$snap_description_finished\" \
+#		       --cleanup timeline  \"$snapper_sync_id\" "
+#	    ret=$($cmd)
+#	    printf "return: '%s'\n" "$ret"
+#	    #sync
+#	fi
 
 	printf "Backup complete for snapper configuration '%s'.\n" "$selected_config" > $PIPE
 
