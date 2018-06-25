@@ -187,7 +187,7 @@ set_snapper_target_config () {
 	*)
 	    # d2s backup (default)
 	    snapper_config_type="parent2disk"
-	    snapper_target_config=snap-$snapper_config
+	    snapper_target_config=$snapper_config
 	    ;;
     esac
 
