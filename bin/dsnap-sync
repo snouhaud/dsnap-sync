@@ -906,7 +906,7 @@ run_backup () {
 		fi
 		$(eval $cmd) 1>/dev/null
 		if [ "$?" -gt 0 ]; then
-		    printf "BTRFS_PIPE: %s" "cat $BTRFS_PIPE"
+		    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}" "$(eval cat $BTRFS_PIPE)"
 		    die "btrfs pipe error."
 		fi
 	    else
@@ -938,7 +938,7 @@ run_backup () {
 		    fi
 		    eval $cmd 1>/dev/null
 		    if [ "$?" -gt 0 ]; then
-			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}" "cat $BTRFS_PIPE"
+			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}" "$(eval cat $BTRFS_PIPE)"
 			die "btrfs pipe error."
 		    fi
 		else
@@ -958,8 +958,8 @@ run_backup () {
 		    fi
 		    $(eval $cmd)
 		    if [ "$?" -gt 0 ]; then
-			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}" "cat $BTRFS_PIPE"
-			#die "btrfs pipe error."
+			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}" "$(eval cat $BTRFS_PIPE)"
+			die "btrfs pipe error."
 		    fi
 		    #printf  "btrfs returns: '%i'\n" "$ret"
 		else
@@ -1071,21 +1071,20 @@ run_finalize () {
 	    $(eval $ssh killall -SIGTERM snapperd)
 	    #printf "Killall '%s'\n" "$?"
 
+	    if [ $verbose -ge 2 ]; then
+		printf "${YELLOW}Identify snapper id ${GREEN}'%s'${YELLOW} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+		       "$snapper_new_id" "$snapper_target_config"
+	    fi
+
 	    # construct snapper match command
 	    cmd="$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
 	    	      | awk ' /'\"$snap_description_running\"'/ ' \
 		      | awk -F '|' ' \$1 == $snapper_new_id {print \$1} ' "
 
-
-	    if [ $verbose -ge 2 ]; then
-		printf "${YELLOW}Identify snapper id ${GREEN}'%s'${YELLOW} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapper_new_id" "$snapper_target_config"
-	    fi
 	    while [ "$ii" -le  "$ii_max" ]; do
-		if [ $verbose -ge 1 ]; then
+		if [ $verbose -ge 2 ]; then
 		    printf "calling: '%s'\n" "$cmd"
 		fi
-
 		ret=$(eval $cmd)
 		#ret=$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
 		#   | awk ' /'\"$snap_description_running\"'/ ' \
@@ -1093,7 +1092,7 @@ run_finalize () {
 		#printf "return: '%s'\n" "$?"
 		if [ $? -eq 0 ]; then
 		    #printf "return: snapper_new_id '%s'\n" "$ret"
-		    if [ "$ret" -eq "$snapper_new_id" ]; then
+		    if [ $ret -eq $snapper_new_id ]; then
 			# got snapshot as $snapper_new_id
 			if [ $verbose -ge 2 ]; then
 			    printf "${YELLOW}Found${NO_COLOR} snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR}\n" \
@@ -1115,11 +1114,12 @@ run_finalize () {
 			    	   --cleanup-algorithm \'timeline\' \
 			    	   \'$snapper_new_id\')
 			else
-			    ret=$(snapper --config \"$snapper_target_config\" modify  \
-				   --description \\\'$snap_description_finished\\\' \
-				   --userdata \\\'subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host\\\' \
-				   --cleanup-algorithm \"timeline\" \
-				   \"$snapper_new_id\")
+			    ret=$(snapper --config $snapper_target_config modify \
+			    		  --description \"$snap_description_finished\" \
+					  --userdata \'"subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host"\' \
+					  --cleanup-algorithm \"timeline\" \
+			     		  $snapper_new_id)
+
 			fi
 			if [ $verbose -ge 2 ]; then
 			    printf "return: '%s'\n" "$ret"
@@ -1429,7 +1429,7 @@ verify_snapper_structure () {
 	    fi
 	fi
 	if [ ! "$dryrun" ]; then
-	    # verify that we can use a dsnap-sync aware template
+	    # verify that we can use the correct snapper template
 	    cmd="$ssh stat --format %i $SNAPPER_TEMPLATE_DIR/$snapper_snapsync_template 2>/dev/null"
 	    if [ -z $(eval $cmd) ]; then
 		printf "${RED}Missing a snapper template %s${NO_COLOR} to configure the snapper subvolume %s in %s on %s.\n" \
@@ -1439,7 +1439,7 @@ verify_snapper_structure () {
 		die "snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" \
 		    "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
 	    fi
-            # create the non existing remote BTRFS subvolume
+            # create the non existing remote BTRFS subvolume for given config
 	    cmd="$ssh btrfs subvolume create $backup_root/$snapper_config 1>/dev/null"
 	    $(eval $cmd) || die "Creation of BTRFS subvolume %s:%s failed.\n" \
 				"$remote_host" "$backup_root/$snapper_config"
@@ -1447,16 +1447,19 @@ verify_snapper_structure () {
             $(eval $cmd) || die "Changing the directory mode for %s on %s failed.\n" \
 				"$backup_root/$snapper_config" "$remote_host"
 
-	    # create the non existing remote snapshot
-	    cmd="$ssh btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshot 1>/dev/null"
-	    $(eval $cmd) || \
-		die "Creation of BTRFS subvolume $remote_host: $backup_root/$snapper_config failed."
-	    cmd="$ssh chmod 0700 $backup_root/$snapper_config 1>/dev/null"
-            $(eval $cmd) || \
-		die "Changing the directory mode for '$backup_root/$snapper_config' on '$remote_host'."
+	    # create the non existing remote BTRFS subvolume for given snapshot
+	    cmd="$ssh stat --format %i $backup_root/$snapper_config/$snapper_snapshot 2>/dev/null"
+	    if [ -z $(eval $cmd) ]; then
+		cmd="$ssh btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshot 1>/dev/null"
+		$(eval $cmd) || \
+		    die "Creation of BTRFS subvolume $remote_host: $backup_root/$snapper_config failed."
+		cmd="$ssh chmod 0700 $backup_root/$snapper_config 1>/dev/null"
+		$(eval $cmd) || \
+		    die "Changing the directory mode for '$backup_root/$snapper_config' on '$remote_host'."
+	    fi
 	else
-	    printf "dryrun: Would create new snapper structure in '%s:%s' ...\n"  "$backup_root/$snapper_config"
 	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_snapsync_template"
+	    printf "dryrun: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_config/$snapper_snapshot"
 	fi
     else
 	cmd="$ssh stat --format %i $backup_root/$snapper_config 2>/dev/null"
@@ -1495,7 +1498,7 @@ verify_snapper_structure () {
 	    if [ -n $(eval $cmd) ]; then
 		# if changed, adapt targets SUBVOLUME path
 		if [ $verbose -ge 1 ]; then
-		    printf "${RED}TODO:${NO_COLOR}: Check if value for key 'SUBVOLUME' needs an update in snapper config %s\n"  \
+		    printf "${RED}TODO:${NO_COLOR} Check if value for key 'SUBVOLUME' needs an update in snapper config %s\n"  \
 			   "$snapper_config"
 		fi
 		#get_config "/etc/snapper/configs/$snapper_config" "SUBVOLUME"
@@ -1506,10 +1509,21 @@ verify_snapper_structure () {
 		#    $ssh $cmd || die "Can't create subvolume %s in %s to hold target snapshots.\n" "$snapper_snapshots" "$backup_root/$snapper_config"
 		#fi
 	    fi
+	    # verify existence of SUBVOLUME $backup_root/$snapper_config/.snapshots
 	    cmd="$ssh stat --format %i $backup_root/$snapper_config/$snapper_snapshots 2>/dev/null"
-	    if [ $(eval $cmd) -ne 256 ]; then
-		die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" \
-		    "$snapper_config" "$backup_root/$snapper_config"
+	    ret=$(eval $cmd)
+	    if [ -z $ret ]; then
+		if [ $verbose -ge 1 ]; then
+		    printf "create new BTRFS subvolume '%s'\n" $backup_root/$snapper_config/$snapper_snapshots
+		fi
+		cmd="$ssh btrfs subvolume create $backup_root/$snapper_config/$snapper_snapshots"
+       		$(eval $cmd) || die "Creation of snapper subvolume %s failed.\n" \
+				"$backup_root/$snapper_config/$snapper_snapshots"
+	    else
+		if [ $ret -ne 256 ]; then
+		    die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" \
+			"$snapper_config" "$backup_root/$snapper_config"
+		fi
 	    fi
 	fi
     else
