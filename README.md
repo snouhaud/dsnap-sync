@@ -1,5 +1,5 @@
 <!-- dsnap-sync README.md -->
-<!-- version: 0.5.2 -->
+<!-- version: 0.5.5 -->
 
 # dsnap-sync
 
@@ -48,7 +48,6 @@ A scheduled run will take all needed parameters from config options.
 `dsnap-sync` does support systemd.timer units. Please refer to related paragraph [documenting systemd](https://github.com/rzerres/dsnap-sync#systemd).
 
 ## Requirements
-g
 beside the shell itself, `dsnap-sync`relies on external tools to achieve its goal.
 At run-time their availability is checked. Following tools are are used:
 
@@ -79,30 +78,42 @@ The local snapper configuration will be extended to make use
 of a new template 'dsnap-sync'.
 
 The package is also available in the
-[AUR](https://aur.archlinux.org/packages/dsnap-sync/).
+<!-- [AUR](https://aur.archlinux.org/packages/dsnap-sync/). -->
 
 ## Options
 
     Usage: dsnap-sync [options]
 
     Options:
-     -d, --description <desc> Change the snapper description. Default: "latest incremental backup"
-     -c, --config <config>    Specify the snapper configuration to use. Otherwise will perform for each snapper
-                              configuration. Can list multiple configurations within quotes, space-separated
-                              (e.g. -c "root home").
-     -n, --noconfirm          Do not ask for confirmation for each configuration. Will still prompt for backup
-                              directory name on first backup
-     -u, --uuid <UUID>        Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt.
-         --UUID <UUID>        If multiple mount points are found with the same UUID, will prompt user.
-     -s, --subvolid <subvlid> Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
-         --SUBVOLID
-     -t, --target <target>    Specify the mountpoint of the BTRFS subvolume to back up to.
-	     --TARGET <target>
-         --remote <address>   Send the snapshot backup to a remote machine. The snapshot will be sent via ssh. You
-                              should specify the remote machine's hostname or ip address. The 'root' user must be
-                              permitted to login on the remote machine.
-         --dry-run            perform a trial run with no changes made.
-     -v, --verbose            Be more verbose on what's going on.
+    -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
+    -d, --description <desc>    Change the snapper description. Default: "latest incremental backup"
+        --label-finished <desc> snapper description tagging successful jobs. Default: "dsnap-sync backup"
+        --label-running <desc>  snapper description tagging active jobs. Default: "dsnap-sync in progress"
+        --label-synced <desc>   snapper description tagging last synced jobs.
+                                Default: "dsnap-sync last incremental"
+        --color                 Enable colored output messages
+    -c, --config <config>       Specify the snapper configuration to use. Otherwise will perform for each snapper
+                                configuration. Can list multiple configurations within quotes, space-separated
+                                (e.g. -c "root home").
+        --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name.
+    -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
+        --batch                 directory name on first backup"
+        --nonotify              Disable graphical notification (via dbus)
+        --nopv                  Disable graphical progress output (disable pv)
+    -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
+                                You should specify the remote machine's hostname or ip address. The 'root' user
+                                must be permitted to login on the remote machine.
+    -p, --port <port>           The remote port.
+    -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
+    -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt."
+                                If multiple mount points are found with the same UUID, will prompt user."
+    -t, --target <target>       Specify the mountpoint of the BTRFS subvolume to back up to.
+        --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh. You
+                                should specify the remote machine's hostname or ip address. The 'root' user must be
+                                permitted to login on the remote machine.
+        --dry-run               perform a trial run where no changes are made.
+    -v, --verbose               Be more verbose on what's going on (use multiple times to be more verbose).
+        --version		        show program version
 
 ## First run
 
@@ -128,7 +139,6 @@ You have to confirm any further operation, or use defaults (option: noconfirm).
 #### Dry-run: Select config, select Target, as batchjob (--noconfirm)
 
     # dsnap-sync  -c root -s 265 --noconfirm --dry-run
-
 
 ### dsnap-sync to remote host
 
