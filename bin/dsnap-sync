@@ -62,7 +62,7 @@ selected_uuid='none'
 selected_target='none'
 selected_subvol='none'
 snapper_snapshots=".snapshots"  # hardcoded in snapper
-snapper_snapsync_template="dsnap-sync"
+snapper_subvolume_template="dsnap-sync"
 snapper_config_type='none'
 #snapper_config_postfix="."`hostname`
 snapper_config_postfix=
@@ -639,7 +639,14 @@ run_config () {
     for selected_config in $selected_configs; do
 	# only process existing dsnap-sync configurations
 	if [ ! -f "/etc/snapper/configs/$selected_config" ]; then
-	    die "Selected snapper configuration '$selected_config' does not exist."
+	    if [ $verbose -ge 1 ]; then
+		printf "Did you forget to create the snapper configuration for config '%s' on source?\n" \
+		   "$selected_config"
+		printf "You can create it with following command:\n"
+		printf "${MAGENTA}snapper --config ${GREEN}%s${MAGENTA} create-config --template ${GREEN}%s${MAGENTA} <btrfs-subvolume-path>${NO_COLOR}\n" \
+		   "$selected_config" "$snapper_subvolume_template"
+	    fi
+	    die "Can't backup snapper configuration '$selected_config' that does not exist."
 	else
 	    . /etc/snapper/configs/$selected_config
 	    if [ "$SUBVOLUME" = "/" ]; then
@@ -1312,7 +1319,7 @@ select_target_disk () {
 }
 
 set_config(){
-    local config=${1:-/etc/snapper/config-templates/"$snapper_snapsync_template"}
+    local config=${1:-/etc/snapper/config-templates/"$snapper_subvolume_template"}
     local config_key=${2:-SUBVOLUME}
     local config_value=${3:-/var/lib/dsnap-sync}
 
@@ -1430,14 +1437,14 @@ verify_snapper_structure () {
 	fi
 	if [ ! "$dryrun" ]; then
 	    # verify that we can use the correct snapper template
-	    cmd="$ssh stat --format %i $SNAPPER_TEMPLATE_DIR/$snapper_snapsync_template 2>/dev/null"
+	    cmd="$ssh stat --format %i $SNAPPER_TEMPLATE_DIR/$snapper_subvolume_template 2>/dev/null"
 	    if [ -z $(eval $cmd) ]; then
 		printf "${RED}Missing a snapper template %s${NO_COLOR} to configure the snapper subvolume %s in %s on %s.\n" \
-		       "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
+		       "$snapper_subvolume_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
 		printf "Did you miss to install the dsnap-sync's default snapper template on %s?\n" \
 		       "$remote"
 		die "snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" \
-		    "$snapper_snapsync_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
+		    "$snapper_subvolume_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
 	    fi
             # create the non existing remote BTRFS subvolume for given config
 	    cmd="$ssh btrfs subvolume create $backup_root/$snapper_config 1>/dev/null"
@@ -1458,7 +1465,7 @@ verify_snapper_structure () {
 		    die "Changing the directory mode for '$backup_root/$snapper_config' on '$remote_host'."
 	    fi
 	else
-	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_snapsync_template"
+	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
 	    printf "dryrun: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_config/$snapper_snapshot"
 	fi
     else
@@ -1482,9 +1489,9 @@ verify_snapper_structure () {
 	cmd="$ssh stat --format %i $SNAPPER_CONFIG_DIR/$snapper_config 2>/dev/null"
 	if [ -z $(eval $cmd) ]; then
 	    # snapper will create new structure at $backup_root/$snapper_config/.snapshots
-    	    cmd="$ssh snapper --config $snapper_config create-config --template $snapper_snapsync_template --fstype btrfs $backup_root/$snapper_config"
+    	    cmd="$ssh snapper --config $snapper_config create-config --template $snapper_subvolume_template --fstype btrfs $backup_root/$snapper_config"
 	    if [ $verbose -ge 1 ]; then
-		printf "create new snapper_config '%s' using template '%s'" $snapper_config $snapper_snapsync_template
+		printf "create new snapper_config '%s' using template '%s'\n" $snapper_config $snapper_subvolume_template
 	    fi
        	    $(eval $cmd) || die "Creation of snapper capable config %s on %s failed.\n" \
 				"$backup_root/$snapper_config" "$remote_host"
