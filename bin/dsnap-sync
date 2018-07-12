@@ -1031,7 +1031,7 @@ run_finalize () {
 
 	src_host=$(eval cat /etc/hostname)
 	src_uuid=$(eval findmnt --noheadings --output UUID --target $SUBVOLUME)
-	src_subvolid=$(eval findmnt --noheadings --output OPTIONS $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
+	src_subvolid=$(eval findmnt --noheadings --output OPTIONS --target $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
 
 	# Tag new snapshots key/value parameter
 	if [ $verbose -ge 1 ]; then
