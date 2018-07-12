@@ -115,7 +115,8 @@ check_snapper_failed_ids () {
 
     # active, non finished snapshot backups are marked with a reasonable string
     # default: $(snap_description_running -> "$progname backup in progress" (userdata: host=$source)
-    snapper_failed_ids=$(eval snapper --config $selected_config list --type single | awk '/'"$snap_description_running"'/ {cnt++} END {print cnt}')
+    snapper_failed_ids=$(eval snapper --config $selected_config list --type single \
+			     | awk '/'"$snap_description_running"'/ {cnt++} END {print cnt}')
     #snapper_failed_ids="snapper --config $selected_config list --type single \
     #	    | awk '/'"$snap_description_running"'/' \
     # 	    | awk ' /'host='"$remote"'/ {cnt++} END {print cnt}'"
@@ -139,29 +140,6 @@ check_snapper_failed_ids () {
 	fi
     fi
 }
-
-quote_args () {
-    # quote command in ssh call to prevent remote side from expanding any arguments
-    # using dash's buildin printf
-
-    args=
-    if [ $# -gt 0 ]; then
-	# no need to make COMMAND an array - ssh will merge it anyway
-	COMMAND=
-	while [ $# -gt 0 ]; do
-	    arg=$(printf "%s" "$1")
-	    COMMAND="${COMMAND}${arg} "
-	    shift
-	done
-	args="${args}${COMMAND}"
-    fi
-}
-
-set_snapper_target_config () {
-    local snapper_config=$1
-    local snapper_config_tpye='none'
-    local key
-    local value
 
     if [ $verbose -ge 1 ]; then
 	printf "Verify snapper configuration type for %s...\n" $snapper_config
@@ -272,9 +250,9 @@ get_disk_infos () {
     local fs_option
 
     # get mounted BTRFS infos
-    if [ "$($ssh findmnt --noheadings --nofsroot --target / --output FSTYPE)" = "btrfs" ]; then
+    if [ "$($ssh findmnt --noheadings --nofsroot --mountpoint / --output FSTYPE)" = "btrfs" ]; then
 	# root filesystem is never seen as valid target location
-	exclude_uuid=$($ssh findmnt --noheadings --nofsroot --types btrfs --target / --output UUID)
+	exclude_uuid=$($ssh findmnt --noheadings --nofsroot --types btrfs --mountpoint / --output UUID)
 	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list | grep -v $exclude_uuid | awk '{print $1}')
 	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list | grep -v $exclude_uuid | awk '{print $2}')
 	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | grep -v $exclude_uuid | awk '{print $2}')
@@ -285,15 +263,14 @@ get_disk_infos () {
     fi
 
     # we need at least one target disk
-    if [ ${#disk_targets} -eq 0 ]; then die "no suitable target disk found"
-    fi
+    if [ ${#disk_targets} -eq 0 ]; then die "no suitable target disk found"; fi
 
     # Posix Shells do not support Array. Therefore using ...
     # Pseudo-Arrays (assumption: equal number of members)
     # Pseudo-Array: disk_uuid_$i
     # Pseudo-Array: disk_target_$i
     # Pseudo-Array: fs_options_$i
-    # Pseudo-Array: disk_selected_$y (reference to $i element)
+    # Pseudo-Array: disk_selected_$i (reference to $i element)
     # List: disk_uuid_match (reference to matching preselected uuids)
     # List: disk_target_match (reference to matching preselected targets)
 
@@ -343,16 +320,16 @@ notify () {
 		 notify-send -a $progname "$progname: $1" "$2" --icon="dialog-$3"
 	done
     else
-	printf "%s %s\n" "$progname" "$2"
+	printf "%s\n" "$2"
     fi
-}
-
-notify_info () {
-    notify "$1" "$2" "information"
 }
 
 notify_error () {
     notify "$1" "$2" "error"
+}
+
+notify_info () {
+    notify "$1" "$2" "information"
 }
 
 parse_params () {
@@ -412,7 +389,7 @@ parse_params () {
 		set -- $params
 		shift $count
 		;;
-	    --dry-run)
+	    --dry-run|--dryrun)
 		dryrun=1
 		shift 1
 		;;
@@ -905,9 +882,9 @@ run_backup () {
 	    if [ $verbose -ge 1 ]; then
     printf "${MAGENTA}Sending first snapshot${NO_COLOR} for snapper config ${MAGENTA}'%s' (size=%s)${NO_COLOR} ...\n" "$selected_config" "$snapper_target_snapshot_size"
 	    fi
-    if [ ! "$dryrun" ]; then
+	    if [ ! "$dryrun" ]; then
 		# the actual data sync to the target
-		# this make take a while, depending on datasize and line-speed
+		# this may take a while, depending on datasize and line-speed
 		if [ $verbose -ge 2 ]; then
 		    printf "cmd: '%s'\n" "$cmd"
 		fi
@@ -930,9 +907,10 @@ run_backup () {
 		printf "New source snapshot: '%s' (id: %s)\n" "$snapper_new_snapshot" "$snapper_new_id"
 		printf "New target snapshot: '%s' (id: %s)\n" "$snapper_target_snapshot/snapshot" "$snapper_new_id"
 	    fi
-	    cmd="$ssh stat --format %i $backup_root/$snapper_target_config/$snapper_snapshots/$snapper_sync_id 2>/dev/null"
-	    if [ -n $(eval $cmd) ]; then
 
+	    cmd="$ssh stat --format %i $backup_root/$snapper_target_config/$snapper_snapshots/$snapper_source_sync_id 2>/dev/null"
+	    ret=$(eval $cmd)
+	    if [ $? -eq 0 ]; then
 	    	# Sends the difference between the new snapshot and old synced snapshot to the
 		# backup location. Using the -c (clone-source) flag instead of -p (parent) tells it
 		# that there is an identical subvolume to the synced snapshot at the receiving
@@ -1112,12 +1090,11 @@ run_finalize () {
 			    #printf "calling: '%s'\n" "$cmd"
 			fi
 
-			# call command
+			# call command (respect needed quotes)
 			if [ $remote ]; then
-			    # !! working !!
 			    ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
 			    	   --description \\\'$snap_description_finished\\\' \
-			    	   --userdata \\\'subvolid=$src_subvolid, uuid=$src_uuid, host=$src_host\\\' \
+			    	   --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
 			    	   --cleanup-algorithm \'timeline\' \
 			    	   \'$snapper_new_id\')
 			else
@@ -1192,16 +1169,6 @@ run_finalize () {
 	    cmd="snapper --config $selected_config modify --description $snap_description_finished $snapper_sync_id"
 	    printf "dryrun: %s\n" "$cmd"
 	fi
-
-#	# Cleanup synced source snapshots
-#	if [ -n "$snapper_sync_id" ]; then
-#	    cmd="snapper --verbose --config \"$snapper_config\" modify \
-#		       --description \"$snap_description_finished\" \
-#		       --cleanup timeline  \"$snapper_sync_id\" "
-#	    ret=$($cmd)
-#	    printf "return: '%s'\n" "$ret"
-#	    #sync
-#	fi
 
 	printf "Backup complete for snapper configuration '%s'.\n" "$selected_config" > $PIPE
 
