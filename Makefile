@@ -31,5 +31,5 @@ DOC_DIR = $(DESTDIR)$(PREFIX)/share/doc/$(PKGNAME)
 install:
 	@./find_snapper_config || sed -i 's@^SNAPPER_CONFIG=.*@SNAPPER_CONFIG='$(SNAPPER_CONFIG)'@g' bin/$(PKGNAME)
 	@install -Dm755 bin/* -t $(BIN_DIR)/
-	@install -Dm644 ./$(SNAPPER_TEMPLATES)/* -t $(DESTDIR)/$(SNAPPER_TEMPLATES)/
-	@install -Dm644 ./$(DSNAP_SYNC_EXAMPLES)/* -t $(DESTDIR)/$(DOC_DIR)/
+	@install -Dm644 $(SNAPPER_TEMPLATES)/* -t $(DESTDIR)/$(SNAPPER_TEMPLATES)/
+	@install -Dm644 $(DSNAP_SYNC_EXAMPLES)/* -t $(DESTDIR)/$(DOC_DIR)/
