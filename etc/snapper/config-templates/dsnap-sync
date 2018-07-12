@@ -55,6 +55,9 @@ EMPTY_PRE_POST_MIN_AGE="1800"
 # snap-sync as timer unit
 # SNAP_SYNC_EXCLUDE="yes"
 
-# uncomment if your config will be used as snapshot-clone
-#CHILD_CONFIG=true
+# Valid CONFIG_TYPE: archive, child, parent
+# CONFIG_TYPE="archive" -> if synced, stream snapshot to a non btrfs filesystem
+# CONFIG_TYPE="child"   -> if synced, stream snapshot to a given CHILD_CONFIG name
+CONFIG_TYPE="child"
+#CHILD_CONFIG=<child config name>
 #PARENT_CONFIG=<parent config name>
