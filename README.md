@@ -3,18 +3,24 @@
 
 # dsnap-sync
 
+<p align="center">
+  <span>English</span> |
+  <!-- a href="lang/spanish#dsnap-sync">Spanish</a> | -->
+  <a href="lang/german#dsnap-sync">Deutsch</a>
+</p>
+
 ## About
 
 `dsnap-sync` is designed to backup btrfs formated filesystems.
 It takes advantage of the specific snapshots functionality btrfs offers
-and combines it with managemnet functionality of snapper.
+and combines it with managemnet functionality of `snapper`.
 
 `dsnap-sync` creates backups as btrfs-snapshots on a selectable target device.
 Plug in and mount any btrfs-formatted device to your system. Supported targets
 may be either local attached USB drives, as well as automountable remote host
 RAIDs.
-If possible the backup process will send incremental snapshots to the target 
-drive. If the snapshot will be stored on a remote host, the transport will be 
+If possible the backup process will send incremental snapshots to the target
+drive. If the snapshot will be stored on a remote host, the transport will be
 secured with ssh.
 
 The tool is implemented as a posix shell script (dash), to keep the footprint
@@ -25,13 +31,13 @@ will offer details as a reference point.
 
 ## Backup process
 
-The default `dsnap-sync` backup process will iterate through all defined snapper
-configurations that are found on your source system. If you prefer to have single 
+The default `dsnap-sync` backup process will iterate through all defined `snapper`
+configurations that are found on your source system. If you prefer to have single
 processes for each configuration, you are free to define isolated systemd-units or
-call `dsnap-sync` interactively while referencing the intended snapper configuration
+call `dsnap-sync` interactively while referencing the intended `snapper` configuration
 (option `-c` or `--config`).
 
-For each selected snapper configuration `dsnap-sync`
+For each selected `snapper` configuration `dsnap-sync`
 
 * will present/select target device informations
 * will prepare snapper structures
@@ -64,8 +70,8 @@ an example it might be advisable, to save the project subvolume redundantliy
 on to independent targets (disk and tape).
 
 Before `dsnap-sync` will perform the backup, it will present the backupdir,
-spit out the source and target locations will. You have to confirm or adapt 
-the given values. You may use commandline options to supress interaction 
+spit out the source and target locations will. You have to confirm or adapt
+the given values. You may use commandline options to supress interaction
 (e.g --noconfirm, --batch).
 
 
@@ -73,7 +79,7 @@ the given values. You may use commandline options to supress interaction
 
 A scheduled process should be defined as a systemd.unit. Inside the unit
 definition the execution parameter will take the `dsnap-sync` call, appending
-all needed parameters as config options. In combination with a corresponding 
+all needed parameters as config options. In combination with a corresponding
 systemd.timer unit, you are able to finetune your backup needs.
 The [example section](usr/share/doc/Examples.md#systemd)
 will offer details as a reference point.
@@ -104,7 +110,7 @@ To simplify correct target locations, this project uses a Makefile.
     # make install
 
 If your system uses a non-default location for the snapper
-configuration defaults, specify the location with an environment variable 
+configuration defaults, specify the location with an environment variable
 (`SNAPPER_CONFIG`).
 
     Arch Linux/Fedora/Gentoo:
@@ -113,7 +119,7 @@ configuration defaults, specify the location with an environment variable
     Debian/Ubuntu:
     # make SNAPPER_CONFIG=/etc/default/snapper install
 
-The local snapper configuration will be extended to make use
+The local `snapper` configuration will be extended to make use
 of a new template 'dsnap-sync'.
 
 ### Using distribution packages
@@ -134,7 +140,7 @@ Please use your host software package manager.
 ## Options
 
     Usage: dsnap-sync [options]
-      
+
       Options:
       -a, --automount <path>      start automount for given path to get a valid target mountpoint.
       -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
@@ -170,49 +176,71 @@ Please use your host software package manager.
 ## First run
 
 If you have never synced to the paticular target device (first run), `dsnap-sync`
-will take care to create the necessary target filesystem-structure. 
+will take care to create the necessary target filesystem-structure. Following 
+backup types are differenciated:
 
 * btrfs-snapshots
 
-  On the target device the needed snapper structure is validated and build up as needed.
-  Aside the new filesystem path, `dsnap-sync` will use a snapper template 
-  (`/etc/snapper/config-templates/dsnap-sync`) to create a new snapper target configuration.
-  To garantee unique configuration names, `dsnap-sync` take the source configuration name 
-  and postfix it with targets hostname. You can adopt this behaviour with a config option
-  (`--config-postfix`).
- 
-  The default `config-template` of dsnap-sync will inherit following snapper parameters:
-  
+  This is the default backup type. `dsnap-sync` will use this type to sync
+  a btrfs-snapshot of an existing `snapper` configuration from a source 
+  device to a target device. On the target device the needed `snapper` 
+  structure will be build up as needed. Aside the new target filesystem 
+  path, `dsnap-sync` will create a new target `snapper` configuration. It
+  will incorporate the template (`/etc/snapper/config-templates/dsnap-sync`).
+  To garantee unique configuration names, `dsnap-sync` take the source
+  configuration name and postfix it with targets hostname. You can adopt 
+  this behaviour with a config option (`--config-postfix`).
+
+  The default `config-template` of dsnap-sync will inherit following 
+  `snapper` parameters:
+
   * mark new snapshots as type 'single'
   * mark new snaphosts with cleanup-algorithm 'timeline'
   * apply config option 'CONFIG_TYPE=child'
   * apply config option 'TIMELINE_CREATE=no'
   * apply config option 'TIMELINE_CLEANUP=yes'
-  
+
   Please adapt the defaults, if your milage varies.
-  
+
+* btrfs clone
+
+  To duplicate an existing `snapper` configuration within a source host,
+  you should use this backup type.
+  It is useful, if a selected `snapper` configuration from the source
+  host will be synced to a target external disk (disk-2-disk-2-disk).
+  The clone configuration will be managable via `snapper` management
+  tools as well. Of course the target device needs to offer a btrfs
+  filesystem to hold the snapshots.
+
 * btrfs-archive
 
-  Beside btrfs-snapshots, `dsnap-shot` will support another backup type:
-  btrfs-archive. If the target device is not a btrfs filesystem (e.g. ext4,
-  xfs, ltofs tapes), data are copied backupdir.
-  `dsnap-sync` will take the source snapshot-ID and create a corresponding directory 
-  below targets backupdir. Inside this 'target-subdirectory' `dsnap-sync` will mimic the
-  snapper structure: 
+  If the target device is not a btrfs filesystem (e.g. ext4,
+  xfs, ltofs tapes), you need to use this backup type.
   
+  data are copied backupdir.
+  `dsnap-sync` will take the data of the source snapshot-ID and copy them
+  to an ordenary subdirectory. This Base-Directory will be located on the
+  target-device below the backupdir (target-subdirectory). Inside this 
+  'target-subdirectory' `dsnap-sync` will mimic the `snapper` structure:
+
   * the actual btrfs stream will we copied to a subdirectoy called `snapshot`
   * the proccess metadata are saved to a file called `info.xml`
-
+  
+  If you enabled the `ltfs` package, support for backups to tape is possible.
+  ltfs will prepare a tape, than can be mounted afterwards to a selectable
+  mount-point. A `dsnap-sync` backup to this path will be handeld as type
+  `btrfs-archive`.
+  
 ## Automounter
 
 `dsnap-sync` offer all mounted btrfs filesystems as valid process targets.
 Since storage space on disks are very price efficient this days, environments
-often use removable, external disks as additional backup targets. If the 
-external disks aren't mounted at boot time they can't be addressed by the 
-selection function. It's even advisable to not mount them all the time 
+often use removable, external disks as additional backup targets. If the
+external disks aren't mounted at boot time they can't be addressed by the
+selection function. It's even advisable to not mount them all the time
 (e.g prevent risks for malware encryption attacks).
 
-To link external disks in dynamically, but also asure a persistent naming 
+To link in  external disks dynamically, but also asure a persistent naming
 syntax, we can use them as auto-mountable targets. To wakeup the automount
 proccess before parsing available target disks, append the target mount-point
 as a config option to  `dsnap-sync` (e.g: `--automount /var/backups/archive-disk1`).
