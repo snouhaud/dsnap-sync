@@ -946,8 +946,25 @@ run_config_preparation () {
 
 	# get latest successfully finished snapshot
 	# verify source
-	get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-				 "snapper_uuid=${selected_uuid}" "snapper_subvolid=${selected_subvol}" "remote="
+	# WIP: metadata from last snapshot!
+	case $snapper_config_type in
+	    btrfs-snapshot)
+		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
+					 "snapper_uuid=${selected_uuid}" "snapper_subvolid=${selected_subvol}" "remote="
+		;;
+	    btrfs-clone)
+		if [ $verbose -ge 2 ]; then
+		    printf "{RED}TODO:{NO_COLOR} config_type '%s'?\n" "$snapper_config_type"
+		fi
+		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
+					 "snapper_uuid=" "snapper_subvolid=" "remote="
+		;;
+	    *)
+		if [ $verbose -ge 2 ]; then
+		    printf "{RED}TODO:{NO_COLOR} what is needed for config_type '%s'?\n" "$snapper_config_type"
+		fi
+		;;
+	esac
 	snapper_source_sync_id=$snapper_sync_id
 
 	if [ $snapper_sync_id -eq 0 ]; then
@@ -989,6 +1006,8 @@ run_config_preparation () {
 
 		    fi
 		fi
+	        backup_root=$selected_target/$backupdir/$snapper_target_config
+	        #snapper_target_sync_id=$snapper_source_sync_id
 	    else
 	        # get backupdir from snapper target
 	        get_snapper_target_backupdir $backupdir
@@ -1079,12 +1098,20 @@ run_backup () {
 	snapper_source_sync_id=$(eval echo \$snapper_source_sync_id_$i)
 	snapper_source_sync_snapshot=$(eval echo \$snapper_source_sync_snapshot_$i)
 	snapper_target_sync_id=$(eval echo \$snapper_target_sync_id_$i)
-	backup_dir=$(eval echo \$backup_dir_$i)
+	backup_dir=$(eval echo \$backupdir_$i)
 	backup_root=$(eval echo \$backup_root_$i)
 
 	case $snapper_config_type in
-	    btrfs-snapshot|btrfs-clone)
+	    btrfs-snapshot)
 		create_snapshot
+		;;
+	    btrfs-clone)
+		if [ $verbose -ge 2 ]; then
+		    printf "{RED}TODO:{NO_COLOR} config_type '%s'?\n" "$snapper_config_type"
+		fi
+		snapper_source_id=$snapper_source_sync_id
+	        snapper_source_snapshot=$SUBVOLUME/.snapshots/$snapper_source_sync_id/snapshot
+	        snapper_source_info=$SUBVOLUME/.snapshots/$snapper_source_sync_id/info.xml
 		;;
 	    *)
 		if [ $verbose -ge 2 ]; then
@@ -1123,14 +1150,14 @@ run_backup () {
 	    cmd_pv=''
 	fi
 
-	if [ "$snapper_source_sync_id" -eq 0 ] || [ "$snapper_target_sync_id" -eq 0 ]; then
-	    # target never received any snapshot before
-	    cmd="btrfs send $verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
-	    if [ $verbose -ge 1 ]; then
-		printf "${MAGENTA}Sending ${GREEN}first snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
-		       "$selected_config" "$snapper_source_id" "$snapper_source_snapshot_size"
-	    fi
-	    if [ ! "$dryrun" ]; then
+	cmd="btrfs send $verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+	if [ ! "$dryrun" ]; then
+	    if [ "$snapper_source_sync_id" -eq 0 ] || [ "$snapper_target_sync_id" -eq 0 ]; then
+	        # target never received any snapshot before
+	        if [ $verbose -ge 1 ]; then
+	            printf "${MAGENTA}Sending ${GREEN}first snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
+			   "$selected_config" "$snapper_source_id" "$snapper_source_snapshot_size"
+	        fi
 		# the actual data sync to the target
 		# this may take a while, depending on datasize and line-speed
 		if [ $verbose -ge 2 ]; then
@@ -1142,105 +1169,90 @@ run_backup () {
 		    die "btrfs pipe error."
 		fi
 	    else
-		printf "dryrun: %s\n" "$cmd"
+	        # source holds synced snapshots
+	        if [ $verbose -ge 1 ]; then
+	            printf "${MAGENTA}Sending ${GREEN}incremental snapshot${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR}) for snapper config ${GREEN}'%s'${NO_COLOR} ...\n" \
+			   "$snapper_target_id" "$selected_config"
+	        fi
+	        if [ $verbose -ge 2 ]; then
+		    printf "Last synced ${GREEN}source snapshot${NO_COLOR}: '%s' (id: ${GREEN}'%s'${NO_COLOR})\n" \
+			   "$snapper_source_sync_snapshot" "$snapper_source_sync_id"
+		    printf "New source snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
+			   "$snapper_source_snapshot" "$snapper_source_id"
+		    printf "Last synced target snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
+			   "$snapper_target_sync_snapshot" "$snapper_target_sync_id"
+		    printf "New target snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
+			   "$snapper_target_snapshot/snapshot" "$snapper_target_id"
+	        fi
+	        # verify that source snapshot-id corresponds to a matching target snapshot-id
+	        if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
+		    if [ $snapper_target_sync_id -lt $snapper_source_sync_id ]; then
+		        # select commen sync id
+		        ret=$(eval get_snapper_sync_id "snapper_config=${snapper_source_config}" "snapper_sync_id=$snapper_target_sync_id" "remote=")
+		        if [ $ret ]; then
+			    snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
+		        else
+			    printf "no commen sync id.\n"
+		        fi
+		    fi
+
+		fi
+
+	        cmd="$ssh stat --format %i $backup_root/$snapper_snapshots/$snapper_source_sync_id 2>/dev/null"
+	        ret=$(eval $cmd)
+	        if [ $? -eq 0 ]; then
+	       	    # Sends the difference between the new snapshot and old synced snapshot to the
+		    # backup location. Using the -c (clone-source) flag instead of -p (parent) tells it
+		    # that there is an identical subvolume to the synced snapshot at the receiving
+		    # location where it can get its data. This helps speed up the transfer.
+		    cmd="btrfs send $verbose_flag -c $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+		    if [ $verbose -ge 2 ]; then
+		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}target${NO_COLOR} to sync metadata for new snapshot ${GREEN}'%s'${NO_COLOR} ...\n" \
+			       "$snapper_source_sync_snapshot" "$snapper_source_snapshot"
+		        printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
+		    fi
+		    eval $cmd 1>/dev/null
+		    if [ "$?" -gt 0 ]; then
+			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
+			die "btrfs pipe error."
+		    fi
+	        else
+	    	    # need to use source snapshot to provide metadata for target
+		    cmd="btrfs send $verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>BTRFS_PIPE"
+		    if [ $verbose -ge 2 ]; then
+		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}source${NO_COLOR} to sync metadata ...\n" \
+			       "$snapper_source_sync_snapshot"
+	                printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
+		    fi
+		    eval $cmd 1>/dev/null
+		    if [ "$?" -gt 0 ]; then
+		        printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
+		        die "btrfs pipe error."
+		    fi
+	        fi
 	    fi
 	else
-	    # source holds synced snapshots
-	    if [ $verbose -ge 1 ]; then
-		printf "${MAGENTA}Sending ${GREEN}incremental snapshot${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR}) for snapper config ${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapper_target_id" "$selected_config"
-	    fi
-	    if [ $verbose -ge 2 ]; then
-		printf "Last synced ${GREEN}source snapshot${NO_COLOR}: '%s' (id: ${GREEN}'%s'${NO_COLOR})\n" \
-		       "$snapper_source_sync_snapshot" "$snapper_source_sync_id"
-		printf "New source snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
-		       "$snapper_source_snapshot" "$snapper_source_id"
-		printf "Last synced target snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
-		       "$snapper_target_sync_snapshot" "$snapper_target_sync_id"
-		printf "New target snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
-		       "$snapper_target_snapshot/snapshot" "$snapper_target_id"
-	    fi
-	    # verify that source snapshot-id corresponds to a matching target snapshot-id
-	    if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
-		if [ $snapper_target_sync_id -lt $snapper_source_sync_id ]; then
-		    # select commen sync id
-		    ret=get_snapper_sync_id "snapper_config=${snapper_source_config}" "snapper_sync_id=$snapper_target_sync_id" "remote="
-		    if [ $ret ]; then
-			snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
-		    else
-			printf "no commen sync id.\n"
-		    fi
-		fi
-	    fi
-
-	    cmd="$ssh stat --format %i $backup_root/$snapper_snapshots/$snapper_source_sync_id 2>/dev/null"
-	    ret=$(eval $cmd)
-	    if [ $? -eq 0 ]; then
-	    	# Sends the difference between the new snapshot and old synced snapshot to the
-		# backup location. Using the -c (clone-source) flag instead of -p (parent) tells it
-		# that there is an identical subvolume to the synced snapshot at the receiving
-		# location where it can get its data. This helps speed up the transfer.
-		cmd="btrfs send $verbose_flag -c $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
-			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
-		if [ ! "$dryrun" ]; then
-		    if [ $verbose -ge 2 ]; then
-			printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}target${NO_COLOR} to sync metadata for new snapshot ${GREEN}'%s'${NO_COLOR} ...\n" \
-			       "$snapper_source_sync_snapshot" "$snapper_source_snapshot"
-			printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
-		    fi
-		    eval $cmd 1>/dev/null
-		    if [ "$?" -gt 0 ]; then
-			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
-			die "btrfs pipe error."
-		    fi
-		else
-		    printf "dryrun: '%s'" "$cmd"
-		    printf "dryrun: snapper --config %s delete %s\n" "$selected_config" "$snapper_source_sync_id"
-		fi
-	    else
-		# need to use source snapshot to provide metadata for target
-		cmd="btrfs send $verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
-			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>BTRFS_PIPE"
-		if [ ! "$dryrun" ]; then
-		    if [ $verbose -ge 2 ]; then
-			printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}source${NO_COLOR} to sync metadata ...\n" \
-			       "$snapper_source_sync_snapshot"
-			printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
-		    fi
-		    eval $cmd 1>/dev/null
-		    if [ "$?" -gt 0 ]; then
-			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
-			die "btrfs pipe error."
-		    fi
-		else
-		    printf "dryrun: '%s'" "$cmd"
-		fi
-	    fi
+	    printf "dryrun: Would run btrfs send / btrfs receive pipe\n"
+	    #printf "dryrun: '%s'\n" "$cmd"
 	fi
 
 	# finally: send the snapper info metadata
-	if [ -z "$remote" ]; then
-	    if [ ! "$dryrun" ]; then
+        if [ ! $dryrun ]; then
+	    if [ -z "$remote" ]; then
+                cmd="cp $snapper_source_info $snapper_target_snapshot"
 		cp "$snapper_source_info" "$snapper_target_snapshot"
 	    else
-               cmd="cp $snapper_source_info $snapper_target_snapshot"
-	       printf "dryrun: %s\n" "$cmd"
-	    fi
-	else
-	    if [ ! "$dryrun" ]; then
 		if [ -n "$port" ]; then
 		    rsync -avzq -e "ssh -p $port" "$snapper_source_info" "$remote:$snapper_target_snapshot"
 		else
 		    rsync -avzq "$snapper_source_info" "$remote":"$snapper_target_snapshot"
 		fi
-	    else
-		if [ -n "$port" ]; then
-		    cmd="rsync -avzq -e \"ssh -p $port\" $snapper_source_info $remote:$snapper_target_snapshot"
-		else
-		    cmd="rsync -avzq $snapper_source_info $remote:$snapper_target_snapshot"
-		fi
-		printf "dryrun: %s\n" "$cmd"
 	    fi
+	else
+	    printf "dryrun: Would copy info metadate '%s' to target.\n"  \
+		   "$snapper_source_info"
 	fi
 
 	# Save config specific values in pseudo Array
@@ -1308,6 +1320,7 @@ run_finalize () {
 	snapper_source_config=$(eval echo \$snapper_source_config_$i)
 	backupdir=$(eval echo \$backupdir_$i)
 	backup_root=$(eval echo \$backup_root_$i)
+	snapper_config_type=$(eval echo \$snapper_config_type_$i)
 	snapper_source_sync_id=$(eval echo \$snapper_source_sync_id_$i)
 	snapper_target_sync_id=$(eval echo \$snapper_target_sync_id_$i)
 	snapper_source_sync_snapshot=$(eval echo \$snapper_source_sync_snapshot_$i)
@@ -1355,9 +1368,22 @@ run_finalize () {
 	    fi
 
 	    # construct snapper match command
-	    cmd="$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
+	    case $snapper_config_type in
+		btrfs-archive)
+		    # archive btrfs-snapshot to non btrfs-filesystem on target (e.g tape, ext4)
+		    return 0
+		    ;;
+		btrfs-clone)
+		    # no tagging needed
+		    return 0
+		    ;;
+		btrfs-snapshot)
+		    # create btrfs-snapshot on target
+	            cmd="$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
 	    	      | awk ' /'\"$snap_description_running\"'/ ' \
 		      | awk -F '|' ' \$1 == $snapper_target_sync_id {print \$1} ' "
+		    ;;
+	    esac
 
 	    while [ "$ii" -le  "$ii_max" ]; do
 		if [ $verbose -ge 2 ]; then
@@ -1385,10 +1411,10 @@ run_finalize () {
 			# call command (respect needed quotes)
 			if [ $remote ]; then
 			    ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
-			    	   --description \\\'$snap_description_finished\\\' \
-			    	   --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
-			    	   --cleanup-algorithm \'timeline\' \
-			    	   \'$snapper_target_id\')
+			    	       --description \\\'$snap_description_finished\\\' \
+			    	       --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
+			    	       --cleanup-algorithm \'timeline\' \
+			    	       \'$snapper_target_id\')
 			else
 			    ret=$(snapper --config $snapper_target_config modify \
 			    		  --description "$snap_description_finished" \
@@ -1696,13 +1722,13 @@ verify_archive_structure () {
 	    if [ ! $dryrun ]; then
 		$(eval $ssh mkdir --mode=0700 --parents $backup_root)
 	    else
-	       if [ -z $remote_host ]; then
-		   printf "dryrun: Would create backup-path %s ...\n" \
-			  "$backup_root"
-	       else
-		   printf "dryrun: Would create backup-path %s on remote host %s ...\n" \
-			  "$remote_host" "$backup_root"
-	       fi
+		if [ -z $remote_host ]; then
+		    printf "dryrun: Would create backup-path %s ...\n" \
+			   "$backup_root"
+		else
+		    printf "dryrun: Would create backup-path %s on remote host %s ...\n" \
+			   "$remote_host" "$backup_root"
+		fi
 	    fi
 	fi
     fi
@@ -1937,8 +1963,16 @@ verify_snapper_structure () {
 		printf "${MAGENTA}Create new BTRFS subvolume ${GREEN}'%s'${NO_COLOR} using template ${GREEN}'%s'${NO_COLOR}\n" \
 		       $snapper_config $snapper_subvolume_template
 	    fi
-       	    $(eval $cmd) || die "Creation of snapper capable config %s on %s failed.\n" \
-				"$backup_root" "$remote_host"
+       	    $(eval $cmd)
+	    if [ $? -ne 0 ]; then
+		if [ $remote ]; then
+		    die "Creation of snapper capable config %s on %s failed.\n" \
+			"$backup_root" "$remote_host"
+		else
+		    die "Creation of snapper capable config %s failed.\n" \
+			"$backup_root"
+		fi
+	    fi
     	else
        	    # WIP:
 	    # snapper_config exist, now verify if SUBVOLUME needs to be updated
