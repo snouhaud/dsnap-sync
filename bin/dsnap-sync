@@ -180,7 +180,7 @@ create_snapshot () {
 	    printf "${MAGENTA}Snapper source snapshot ${GREEN}'%s'${MAGENTA} created${NO_COLOR}\n" "$snapper_source_id"
 	fi
     else
-	printf "dryrun: Creating source snapshot with snapper config '%s' ...\n" "$selected_config"
+	printf "dryrun: Would create source snapshot with snapper config '%s' ...\n" "$selected_config"
 	snapper_source_sync_id="<snapper_source_id>"
     fi
 }
@@ -427,22 +427,22 @@ get_snapper_config_type () {
     while read -r key value
     do
 	case $key in
-	     CONFIG_TYPE)
-		 snapper_config_type=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
-	    	 continue
-		 ;;
-	     CHILD_CONFIG)
-		 snapper_target_config=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
-		 continue
-		 ;;
-	     PARENT_CONFIG)
-		 snapper_parent_config=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
-		 continue
-		 ;;
-	     *)
-		 # value is not relevant
-	  	 continue
-	  	 ;;
+	    CONFIG_TYPE)
+		snapper_config_type=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+	    	continue
+		;;
+	    CHILD_CONFIG)
+		snapper_target_config=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+		continue
+		;;
+	    PARENT_CONFIG)
+		snapper_parent_config=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+		continue
+		;;
+	    *)
+		# value is not relevant
+	  	continue
+	  	;;
 	esac
     done < $SNAPPER_CONFIG_DIR/$snapper_config
 
@@ -579,7 +579,7 @@ get_snapper_sync_id () {
     cmd="snapper --config "$snapper_config" list --type single \
 	| awk -F '|' '\$1 == "$snapper_sync_id" {print \$1}' "
     ret=$(eval $run_ssh snapper --config "$snapper_config" list --type single \
-	| awk -F '|' '$1 == '"$snapper_sync_id"' {gsub(" ",""); print $1}')
+	      | awk -F '|' '$1 == '"$snapper_sync_id"' {gsub(" ",""); print $1}')
     printf "ret: '%s'\n" $ret
     if [ ${#ret} -ge 1 ]; then
 	# ok, matching snapshot found
@@ -644,7 +644,7 @@ parse_params () {
 		shift 2
 		;;
             --config-postfix)
-                    snapper_config_postfix="$2"
+                snapper_config_postfix="$2"
 		shift 2
 		;;
             --description-finished)
@@ -750,7 +750,7 @@ parse_params () {
 		shift
                 ;;
 	    --config-postfix=*)
-                    snapper_config_postfix="${1#*=}"
+                snapper_config_postfix="${1#*=}"
 		shift
                 ;;
             --color=*)
@@ -822,7 +822,7 @@ parse_params () {
             --) # End of all options
                 shift
                 break
-               ;;
+		;;
             -*)
                 printf "WARN: Unknown option (ignored): $1" >&2
 		die "Unknown option"
@@ -853,7 +853,7 @@ parse_params () {
     else
 	ssh="ssh $remote"
 	if [ ! -z "$port" ]; then
-           ssh="$ssh -p $port"
+            ssh="$ssh -p $port"
         fi
     fi
 
@@ -976,13 +976,19 @@ run_config_preparation () {
 				     "snapper_uuid=" "snapper_subvolid=" "remote=${remote}"
 	    snapper_target_sync_id=$snapper_sync_id
 	    if [ $snapper_target_sync_id -eq 0 ]; then
-		if [ $verbose -eq 1 ]; then
-		    printf "${MAGENTA}No target shapshot available for snapper config ${GREEN}'%s'${MAGENTA} on '%s'...${NO_COLOR}\n" \
-			   "$selected_config" "$remote"
+		if [ $verbose -ge 1 ]; then
+		    if [ $remote ]; then
+		        printf "${MAGENTA}No target shapshot available for snapper config ${GREEN}'%s'${MAGENTA} on '%s'...${NO_COLOR}\n" \
+			       "$selected_config" "$remote"
+		    else
+		        printf "${MAGENTA}No target shapshot available for snapper config ${GREEN}'%s'${MAGENTA}...${NO_COLOR}\n" \
+			       "$selected_config"
+
+		    fi
 		fi
 	    else
-		# get backupdir from snapper target
-		get_snapper_target_backupdir $backupdir
+	        # get backupdir from snapper target
+	        get_snapper_target_backupdir $backupdir
 
 		# set target sync_snapshot path
 		get_snapper_config_value "remote=$remote" \
@@ -1078,7 +1084,7 @@ run_backup () {
 		create_snapshot
 		;;
 	    *)
-		if [ $verbose -gt 2 ]; then
+		if [ $verbose -ge 2 ]; then
 		    printf "{RED}TODO:{NO_COLOR} what is needed for config_type '%s'?\n" "$snapper_config_type"
 		fi
 		;;
@@ -1286,7 +1292,7 @@ run_finalize () {
 	cont_backup=$(eval echo \$snapper_activate_$i)
 	if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
 	    if [ $donotify -gt 0 ]; then
-	       notify_info "Finalize backup" "NOTE: Skipping '$selected_config' configuration."
+		notify_info "Finalize backup" "NOTE: Skipping '$selected_config' configuration."
             fi
 	    continue
 	fi
@@ -1356,8 +1362,8 @@ run_finalize () {
 		fi
 		ret=$(eval $cmd)
 		#ret=$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
-		#   | awk ' /'\"$snap_description_running\"'/ ' \
-		#   | awk -F '|' ' $1 == "$snapper_target_sync_id" {print $1} '
+		    #   | awk ' /'\"$snap_description_running\"'/ ' \
+		    #   | awk -F '|' ' $1 == "$snapper_target_sync_id" {print $1} '
 		#printf "return: '%s'\n" "$?"
 		if [ $? -eq 0 ]; then
 		    if [ $ret -eq $snapper_target_id ]; then
@@ -1616,7 +1622,7 @@ trapkill () {
 }
 
 usage () {
-  cat <<EOF
+    cat <<EOF
 $progname $version
 Usage: $progname [options]
 
@@ -1653,7 +1659,7 @@ Options:
      --version		     show program version
 EOF
 
-  exit 1
+    exit 1
 }
 
 verify_archive_structure () {
@@ -1671,7 +1677,7 @@ verify_archive_structure () {
 	       "$remote"
     fi
 
-        # if not accessible, create backup-path
+    # if not accessible, create backup-path
     cmd="$ssh stat --format %i $backup_root 2>/dev/null"
     if [ -z $(eval $cmd) ]; then
 	if [ ! "$dryrun" ]; then
@@ -1843,13 +1849,13 @@ verify_snapper_structure () {
 	    if [ ! $dryrun ]; then
 		$(eval $ssh mkdir --mode=0700 --parents $base_path)
 	    else
-	       if [ -z $remote_host ]; then
-		   printf "dryrun: Would create backup-path %s ...\n" \
-			  "$base_path"
-	       else
-		   printf "dryrun: Would create backup-path %s on remote host %s ...\n" \
-			  "$remote_host" "$base_path"
-	       fi
+		if [ -z $remote_host ]; then
+		    printf "dryrun: Would create backup-path %s ...\n" \
+			   "$base_path"
+		else
+		    printf "dryrun: Would create backup-path %s on remote host %s ...\n" \
+			   "$remote_host" "$base_path"
+		fi
 	    fi
 	fi
     fi
@@ -1857,16 +1863,16 @@ verify_snapper_structure () {
     # verify that we have a snapper compatible structure for target config (a btrfs subvolume)
     cmd="$ssh stat --format %i $backup_root 2>/dev/null"
     if [ -z $(eval $cmd) ]; then
-	if [ $verbose -ge 1 ]; then
-	    if [ -z "$remote" ]; then
-		printf "${MAGENTA}Create${NO_COLOR} new snapper capable BTRFS ${MAGENTA}subvolume ${GREEN}'%s'${NO_COLOR} ...\n"  \
-		       "$backup_root/$snapper_config"
-	    else
-		printf "${MAGENTA}Create${NO_COLOR} new snapper capable BTRFS ${MAGENTA}subvolume ${GREEN}'%s'${NO_COLOR} on ${MAGENTA}remote host ${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$backup_root" "$remote_host"
-	    fi
-	fi
 	if [ ! "$dryrun" ]; then
+	    if [ $verbose -ge 1 ]; then
+	        if [ -z "$remote" ]; then
+	            printf "${MAGENTA}Create${NO_COLOR} new snapper capable BTRFS ${MAGENTA}subvolume ${GREEN}'%s'${NO_COLOR} ...\n"  \
+			   "$backup_root"
+	        else
+		    printf "${MAGENTA}Create${NO_COLOR} new snapper capable BTRFS ${MAGENTA}subvolume ${GREEN}'%s'${NO_COLOR} on ${MAGENTA}remote host ${GREEN}'%s'${NO_COLOR} ...\n" \
+			   "$backup_root" "$remote_host"
+	        fi
+	    fi
 	    # verify that we can use the correct snapper template
 	    cmd="$ssh stat --format %i $SNAPPER_TEMPLATE_DIR/$snapper_subvolume_template 2>/dev/null"
 	    if [ -z $(eval $cmd) ]; then
