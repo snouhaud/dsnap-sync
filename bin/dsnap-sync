@@ -331,10 +331,13 @@ get_disk_infos () {
 	    ret=$(systemctl --host=$remote status *.automount \
 		      | awk -F ': ' '$0 ~ pattern { print $2 }' \
 			    pattern="Where: $automount_path")
-	    #ret=$(systemctl --host=172.16.10.10  status *.automount | awk -F ':' '/Where:/ { gsub(" ",""); print $2}')
-	    if [ ${#ret} -gt 0 ]; then
-		ret=$($ssh stat --file-system --terse $ret)
-	    fi
+	else
+	    ret=$(systemctl status *.automount \
+		      | awk -F ': ' '$0 ~ pattern { print $2 }' \
+			    pattern="Where: $automount_path")
+	fi
+	if [ ${#ret} -gt 0 ]; then
+	    ret=$($ssh stat --file-system --terse $ret)
 	fi
     fi
 
