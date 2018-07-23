@@ -347,12 +347,19 @@ get_disk_infos () {
 
     # get mounted BTRFS infos
     if [ "$($ssh findmnt --noheadings --nofsroot --mountpoint / --output FSTYPE)" = "btrfs" ]; then
-	# root filesystem is never seen as valid target location
-	exclude_uuid=$($ssh findmnt --noheadings --nofsroot --types btrfs --mountpoint / --output UUID)
-	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list | grep -v $exclude_uuid | awk '{print $1}')
-	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list | grep -v $exclude_uuid | awk '{print $2}')
-	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | grep -v $exclude_uuid | awk '{print $2}')
+	# root filesystem is excluded as a valid target location
+	exclude_uuid=$($ssh findmnt --noheadings --nofsroot --mountpoint / --output UUID)
+	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+			 | grep -v $exclude_uuid \
+			 | awk '{print $1}')
+	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+			 | grep -v $exclude_uuid \
+			 | awk '{print $2}')
+	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
+			 | grep -v $exclude_uuid \
+			 | awk '{print $2}')
     else
+	# target location is not mounted as root
 	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID --list)
 	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output TARGET --list)
 	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | awk '{print $2}')
@@ -1926,22 +1933,18 @@ verify_snapper_structure () {
 				"$backup_root" "$remote_host"
 
 	    # create the non existing remote BTRFS subvolume for given snapshot
-	    cmd="$ssh stat --format %i $backup_root/$snapper_snapshot 2>/dev/null"
-	    if [ -z $(eval $cmd) ]; then
-		cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshot 1>/dev/null"
-		$(eval $cmd) || \
-		    die "Creation of BTRFS subvolume $remote_host: $backup_root failed."
-		cmd="$ssh chmod 0700 $backup_root 1>/dev/null"
-		$(eval $cmd) || \
-		    die "Changing the directory mode for '$backup_root' on '$remote_host'."
-	    fi
+	    cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshot 1>/dev/null"
+	    $(eval $cmd) || \
+		die "Creation of BTRFS subvolume $remote_host: $backup_root failed."
+	    cmd="$ssh chmod 0700 $backup_root 1>/dev/null"
+	    $(eval $cmd) || \
+		die "Changing the directory mode for '$backup_root' on '$remote_host'."
 	else
 	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
 	    printf "dryrun: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_snapshot"
 	fi
     else
-	cmd="$ssh stat --format %i $backup_root 2>/dev/null"
-	if [ $(eval $cmd) -ne 256 ]; then
+	if [ $ret -ne 256 ]; then
 	    die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" \
 		"$snapper_config" "$backup_root"
 	fi
@@ -2049,17 +2052,22 @@ verify_snapper_structure () {
 		die "Can't create snapshot dir on target."
 	    fi
 	else
-	    if [ -z "$remote" ]; then
-		printf "${RED}Cancel snapshot creation${NO_COLOR}: Former snapshot with id ${GREEN}'%s'${NO_COLOR} already exist in ${BLUE}'%s'${NO_COLOR}\n" \
-		       "$snapper_id" "$backup_root/$snapper_snapshots"
-	    else
-		printf "${RED}Cancel snapshot creation${NO_COLOR}: Former snapshot with id ${GREEN}'%s'${NO_COLOR} already exists on ${BLUE}'%s'${NO_COLOR} in ${BLUE}'%s'${NO_COLOR}\n" \
-		       "$snapper_id" "$remote" "$backup_root/$snapper_snapshots"
-	    fi
+	    cmd="$ssh stat --format %i $backup_root/$snapper_snapshots/$snapper_id/snapshot 2>/dev/null"
+	    ret=$(eval $cmd)
+	    if [ $? -eq 0 ] && [ $ret -eq 256 ]; then
+		# a former btrfs snapshot already exists
+		if [ -z "$remote" ]; then
+		    printf "${RED}Cancel snapshot creation${NO_COLOR}: Former snapshot with id ${GREEN}'%s'${NO_COLOR} already exist in ${BLUE}'%s'${NO_COLOR}\n" \
+			   "$snapper_id" "$backup_root/$snapper_snapshots"
+		else
+		    printf "${RED}Cancel snapshot creation${NO_COLOR}: Former snapshot with id ${GREEN}'%s'${NO_COLOR} already exists on ${BLUE}'%s'${NO_COLOR} in ${BLUE}'%s'${NO_COLOR}\n" \
+			   "$snapper_id" "$remote" "$backup_root/$snapper_snapshots"
+		fi
 
-	    # cleanup generated snapper entry
-	    check_snapper_failed_ids $batch
-	    die "Can't create new snapshot with given snapshot-id!"
+		# cleanup generated snapper entry
+		check_snapper_failed_ids $batch
+		die "Can't create new snapshot with given snapshot-id!"
+	    fi
 	fi
     else
 	printf "dryrun: Would check/create path %s to store target snapshot ...\n" \
