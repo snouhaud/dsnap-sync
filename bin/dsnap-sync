@@ -703,7 +703,7 @@ parse_params () {
             -n|--noconfirm|--batch)
 		batch=1
 		interactive=0
-		do_pv_cmd=1
+		do_pv_cmd=0
 		donotify=0
 		shift
 		;;
@@ -904,7 +904,7 @@ parse_params () {
 	if [ $donotify -eq 1 ]; then snap_sync_options="${snap_sync_options} donotify=true"; fi
 	if [ $color -eq 1 ]; then snap_sync_options="${snap_sync_options} color=true"; fi
 	if [ $batch -eq 1 ]; then
-            snap_sync_options="${snap_sync_options} batch=true do_pv_cmd=false"
+            snap_sync_options="${snap_sync_options} batch=true do_pv_cmd=$do_pv_cmd"
         else
             snap_sync_options="${snap_sync_options} interactive=true do_pv_cmd=$do_pv_cmd"
 	fi
@@ -1153,7 +1153,7 @@ run_backup () {
 	snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
 
 	# settings for interactive progress status
-	if [ "$do_pv_cmd" ]; then
+	if [ $do_pv_cmd -eq 1 ]; then
 	    pv_options="--delay-start 2  --interval 5 --format \"time elapsed [%t] | rate %r | total size [%b] | %p | time remaining [%e]\" "
 	    cmd_pv="pv --size $snapper_source_snapshot_size $pv_options |"
 	    #cmd_pv="pv $pv_options --size ${snapper_source_snapshot_size} | dialog --gauge \"$progname: Progress for config '$selected_config'\" 6 85 |"
