@@ -27,7 +27,7 @@
 # difference for the next incremental snapshot.
 
 progname="${0##*/}"
-version="0.5.7"
+version="0.5.8"
 
 # The following lines are modified by the Makefile or
 # find_snapper_config script
@@ -348,23 +348,23 @@ get_disk_infos () {
     fi
 
     # get mounted BTRFS infos
-    if [ "$($ssh findmnt --noheadings --nofsroot --mountpoint / --output FSTYPE)" = "btrfs" ]; then
+    if [ "$(eval $ssh findmnt --noheadings --nofsroot --mountpoint / --output FSTYPE)" = "btrfs" ]; then
 	# root filesystem is excluded as a valid target location
-	exclude_uuid=$($ssh findmnt --noheadings --nofsroot --mountpoint / --output UUID)
-	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+	exclude_uuid=$(eval $ssh findmnt --noheadings --nofsroot --mountpoint / --output UUID)
+	disk_uuids=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
 			 | grep -v $exclude_uuid \
 			 | awk '{print $1}')
-	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+	disk_targets=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
 			 | grep -v $exclude_uuid \
 			 | awk '{print $2}')
-	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
+	fs_options=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
 			 | grep -v $exclude_uuid \
 			 | awk '{print $2}')
     else
 	# target location is not mounted as root
-	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID --list)
-	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output TARGET --list)
-	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | awk '{print $2}')
+	disk_uuids=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID --list)
+	disk_targets=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output TARGET --list)
+	fs_options=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | awk '{print $2}')
     fi
 
     # we need at least one target disk
@@ -1165,40 +1165,26 @@ run_backup () {
 		   "$snapper_source_id" "$snapper_source_snapshot"
 	fi
 
-	cmd=$(eval btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null | grep -q 'quotas not enabled')
+	# qgroup for given path, exclude ancestrals
+	# qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
+	snapper_source_snapshot_size=$(eval btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
+		  | awk 'FNR>2 {print $2}')
 	if [ $verbose -ge 3 ]; then
-	    printf "${MAGENTA}BTRFS qgroiup show result: ${GREEN}'%s', '%s'${NO_COLOR}\n" \
-		   "$?" "$cmd"
+	    printf "${MAGENTA}BTRFS qgroup show result: ${GREEN}'%s'\b${NO_COLOR}'%s'\n" \
+		   "$?" "$snapper_source_snapshot_size"
 	fi
 	#if [ $? -eq 1 ]; then
 	    # subvolume is not configured for quota, (temporary?) enable that
 	    #btrfs_quota_tmp=1
 	    #btrfs quota enable $snapper_source_snapshot 2>/dev/null
 	    #btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
-	    # TODO: until a rescan is not completed, given feedback is not precisely correct
-	    # do we accept to wait?
-	    #cmd=$(btrfs qgroup show --sync -f --gbytes $snapper_source_snapshot 2>/dev/null
-	    #		   | grep -q -e "rescan is running" -e "data inconsistent")
-	    #$(eval $cmd)
-	    #if [ $? -eq 1 ]; then
-	    #    if [ $verbose -ge 3 ]; then
-	    #        printf "${RED}WIP:${NO_COLOR} Quota was disabled. Waiting for rescan to finish ...\n"
-	    #    fi
-	    #    while true; do
-	    #        sleep 2
-	    #        $(eval $cmd)
-	    #        if [ $? -eq 0 ]; then
-	    #	         break
-	    #        fi
-	    #    done
-	    #fi
 	#fi
 
-	# qgroup for given path, exclude ancestrals
-	# qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
-	# need to substitue btrfs 'GiB' suffix, since pv will need 'G'
-	snapper_source_snapshot_size=$(eval btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
+	# need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
+	if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+	    snapper_source_snapshot_size=$(eval btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
 					   | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
+	fi
 	if [ $verbose -ge 2 ]; then
 	    printf "${MAGENTA}BTRFS quota size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
 		   "$snapper_source_id" "$snapper_source_snapshot_size"
@@ -1213,7 +1199,7 @@ run_backup () {
 
 	# settings for interactive progress status
 	if [ $do_pv_cmd -eq 1 ]; then
-	    pv_options="--delay-start 2  --interval 5 --format \"time elapsed [%t] | rate %r | total size [%b] | %p | time remaining [%e]\" "
+	    pv_options="--delay-start 2  --interval 5 --format \"time elapsed [%t] | avg rate %a | rate %r | transmitted [%b] | %p | time remaining [%e]\" "
 	    cmd_pv="pv --size $snapper_source_snapshot_size $pv_options |"
 	    #cmd_pv="pv $pv_options --size ${snapper_source_snapshot_size} | dialog --gauge \"$progname: Progress for config '$selected_config'\" 6 85 |"
 	else
