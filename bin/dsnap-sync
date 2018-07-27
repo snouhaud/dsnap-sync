@@ -1205,8 +1205,9 @@ run_backup () {
 	        fi
 	        # verify that source snapshot-id corresponds to a matching target snapshot-id
 	        if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
-		    if [ $snapper_target_sync_id -lt $snapper_source_sync_id ]; then
-		        # select commen sync id
+		    #if [ $snapper_target_sync_id -lt $snapper_source_sync_id ]; then
+		    if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
+			# select commen sync id
 		        ret=$(eval get_snapper_sync_id "snapper_config=${snapper_source_config}" "snapper_sync_id=$snapper_target_sync_id" "remote=")
 		        if [ $ret ]; then
 			    snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
