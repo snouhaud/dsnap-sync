@@ -1503,7 +1503,8 @@ run_finalize () {
 	fi
 
 	if [ $verbose -ge 1 ]; then
-	    printf "Backup complete for snapper configuration '%s'.\n" "$selected_config" > $PIPE
+	    printf "Backup complete: id=${GREEN}'%s'${NOCOLOR}, config=${GREEN}'%s'${NOCOLOR}\n" \
+		   "$snapper_source_id" "$selected_config"
 	fi
     done
 }
