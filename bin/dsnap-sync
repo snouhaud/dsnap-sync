@@ -1220,14 +1220,15 @@ run_backup () {
 	        cmd="$ssh stat --format %i $backup_root/$snapper_snapshots/$snapper_source_sync_id 2>/dev/null"
 	        ret=$(eval $cmd)
 	        if [ $? -eq 0 ]; then
-	       	    # Sends the difference between the new snapshot and old synced snapshot to the
-		    # backup location. Using the -c (clone-source) flag instead of -p (parent) tells it
-		    # that there is an identical subvolume to the synced snapshot at the receiving
-		    # location where it can get its data. This helps speed up the transfer.
-		    cmd="btrfs send $verbose_flag -c $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+	       	    # Sends the difference between the new snapshot and old synced snapshot.
+		    # Using the flag -p (parent) will require the availibility of an identical readonly
+		    # subvolume on the source and the receiving location (the parent-id).
+		    # using "btrfs send -p" instead of "btrfs send -c", then no parent search would be
+		    # needed (Andreij explained in: https://www.spinics.net/lists/linux-btrfs/msg69369.html)
+		    cmd="btrfs send $verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
 		    if [ $verbose -ge 3 ]; then
-		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}target${NO_COLOR} to sync metadata for new snapshot ${GREEN}'%s'${NO_COLOR} ...\n" \
+		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}source${NO_COLOR} to sync metadata for new snapshot ${GREEN}'%s'${NO_COLOR} ...\n" \
 			       "$snapper_source_sync_snapshot" "$snapper_source_snapshot"
 		        printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
 		    fi
@@ -1237,18 +1238,11 @@ run_backup () {
 			die "btrfs pipe error."
 		    fi
 	        else
-	    	    # need to use source snapshot to provide metadata for target
-		    cmd="btrfs send $verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
-			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>BTRFS_PIPE"
+		    # is this clause possible?
 		    if [ $verbose -ge 3 ]; then
-		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}source${NO_COLOR} to sync metadata ...\n" \
+		        printf "${RED}Error: ${NO_COLOR}No commen sync snapshot ${GREEN}'%s'${NO_COLOR} on ${GREEN}source${NO_COLOR} to sync metadata ...\n" \
 			       "$snapper_source_sync_snapshot"
-	                printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
-		    fi
-		    eval $cmd 1>/dev/null
-		    if [ "$?" -gt 0 ]; then
-		        printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
-		        die "btrfs pipe error."
+	                die "btrfs send/recieve error."
 		    fi
 	        fi
 	    fi
