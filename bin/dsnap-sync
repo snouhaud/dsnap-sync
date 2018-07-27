@@ -178,7 +178,10 @@ create_snapshot () {
 	fi
 	snapper_source_snapshot=$SUBVOLUME/.snapshots/$snapper_source_id/snapshot
 	snapper_source_info=$SUBVOLUME/.snapshots/$snapper_source_id/info.xml
+
+	btrfs quota enable $snapper_source_snapshot
 	sync
+
         if [ $verbose -ge 3 ]; then
 	    printf "${MAGENTA}Snapper source snapshot ${GREEN}'%s'${MAGENTA} created${NO_COLOR}\n" "$snapper_source_id"
 	fi
@@ -1156,9 +1159,57 @@ run_backup () {
 		;;
 	esac
 
-	# TODO: to report correct values btrfs-quota must be activated for the source subvol!
-	snapper_source_snapshot_size=$(du --sum $snapper_source_snapshot 2>/dev/null | awk -F ' ' '{print $1}')
-	snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
+	# report correct subvolume size via btrfs quota
+	if [ $verbose -ge 2 ]; then
+	    printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
+		   "$snapper_source_id" "$snapper_source_snapshot"
+	fi
+
+	cmd=$(eval btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null | grep -q 'quotas not enabled')
+	if [ $verbose -ge 3 ]; then
+	    printf "${MAGENTA}BTRFS qgroiup show result: ${GREEN}'%s', '%s'${NO_COLOR}\n" \
+		   "$?" "$cmd"
+	fi
+	#if [ $? -eq 1 ]; then
+	    # subvolume is not configured for quota, (temporary?) enable that
+	    #btrfs_quota_tmp=1
+	    #btrfs quota enable $snapper_source_snapshot 2>/dev/null
+	    #btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
+	    # TODO: until a rescan is not completed, given feedback is not precisely correct
+	    # do we accept to wait?
+	    #cmd=$(btrfs qgroup show --sync -f --gbytes $snapper_source_snapshot 2>/dev/null
+	    #		   | grep -q -e "rescan is running" -e "data inconsistent")
+	    #$(eval $cmd)
+	    #if [ $? -eq 1 ]; then
+	    #    if [ $verbose -ge 3 ]; then
+	    #        printf "${RED}WIP:${NO_COLOR} Quota was disabled. Waiting for rescan to finish ...\n"
+	    #    fi
+	    #    while true; do
+	    #        sleep 2
+	    #        $(eval $cmd)
+	    #        if [ $? -eq 0 ]; then
+	    #	         break
+	    #        fi
+	    #    done
+	    #fi
+	#fi
+
+	# qgroup for given path, exclude ancestrals
+	# qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
+	# need to substitue btrfs 'GiB' suffix, since pv will need 'G'
+	snapper_source_snapshot_size=$(eval btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
+					   | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
+	if [ $verbose -ge 2 ]; then
+	    printf "${MAGENTA}BTRFS quota size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
+		   "$snapper_source_id" "$snapper_source_snapshot_size"
+	fi
+
+	# should we disable quota usage again?
+	#if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
+
+	#snapper_source_snapshot_size=$(du --sum $snapper_source_snapshot 2>/dev/null \
+	#	| awk -F ' ' '{print $1}')
+	#snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
 
 	# settings for interactive progress status
 	if [ $do_pv_cmd -eq 1 ]; then
