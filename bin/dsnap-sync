@@ -1002,9 +1002,6 @@ run_config_preparation () {
 					 #"snapper_uuid=${selected_uuid}" "snapper_subvolid=${selected_subvol}" "remote="
 		;;
 	    btrfs-clone)
-		if [ $verbose -ge 3 ]; then
-		    printf "${RED}TODO:${NO_COLOR} config_type '%s'?\n" "$snapper_config_type"
-		fi
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
 					 "snapper_uuid=" "snapper_subvolid=" "remote="
 		;;
@@ -1043,21 +1040,25 @@ run_config_preparation () {
 	    get_snapper_last_sync_id "snapper_config=${snapper_target_config}" \
 				     "snapper_description=${snap_description_synced}" \
 				     "snapper_uuid=" "snapper_subvolid=" "remote=${remote}"
-				     #"snapper_uuid=" "snapper_subvolid=" "remote=${remote}"
 	    snapper_target_sync_id=$snapper_sync_id
+
+	    # need to have corresponding source and target sync id's
+	    if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
+		snapper_target_sync_id=0
+	    fi
+
 	    if [ $snapper_target_sync_id -eq 0 ]; then
 		if [ $verbose -ge 2 ]; then
 		    if [ $remote ]; then
-			printf "${MAGENTA}No target shapshot available for snapper config ${GREEN}'%s'${MAGENTA} on '%s'...${NO_COLOR}\n" \
+			printf "${MAGENTA}No synced target shapshot available for snapper config ${GREEN}'%s'${MAGENTA} on '%s'...${NO_COLOR}\n" \
 			       "$selected_config" "$remote"
 		    else
-			printf "${MAGENTA}No target shapshot available for snapper config ${GREEN}'%s'${MAGENTA}...${NO_COLOR}\n" \
+			printf "${MAGENTA}No synced target shapshot available for snapper config ${GREEN}'%s'${MAGENTA}...${NO_COLOR}\n" \
 			       "$selected_config"
 
 		    fi
 		fi
 		backup_root=$selected_target/$backupdir/$snapper_target_config
-		#snapper_target_sync_id=$snapper_source_sync_id
 	    else
 		# get backupdir from snapper target
 		get_snapper_target_backupdir $backupdir
@@ -1282,7 +1283,6 @@ run_backup () {
 	        fi
 	        # verify that source snapshot-id corresponds to a matching target snapshot-id
 	        if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
-		    #if [ $snapper_target_sync_id -lt $snapper_source_sync_id ]; then
 		    if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
 			# select commen sync id
 		        ret=$(get_snapper_sync_id "snapper_config=${snapper_source_config}" "snapper_sync_id=$snapper_target_sync_id" "remote=")
