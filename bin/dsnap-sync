@@ -1214,7 +1214,8 @@ run_backup () {
 		#fi
 
 		# need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
-		if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+		#if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+		if [ $snapper_source_snapshot_size -ge 1048576 ]; then
 	            snapper_source_snapshot_size=$(btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
 						       | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
 		fi
@@ -1228,7 +1229,7 @@ run_backup () {
 	    else
 		snapper_source_snapshot_size=$(du --sum $snapper_source_snapshot 2>/dev/null \
 						   | awk -F ' ' '{print $1}')
-		if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+		if [ $snapper_source_snapshot_size -ge 1048576 ]; then
 		    snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
 		fi
 		if [ $verbose -ge 2 ]; then
