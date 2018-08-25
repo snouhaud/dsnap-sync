@@ -216,7 +216,7 @@ get_poolmember_next () {
 	fi
 	i=$(($i + 1))
     done
-    
+
     if [ $verbose -ge 3 ]; then
 	printf "${MAGENTA}poolmember_next for media-pool ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}%s${NO_COLOR}\n" \
 	       "$mediapool_name" "$volume_name_next"
@@ -247,6 +247,7 @@ get_slot () {
 	    | .Slot ' \
 	    ${mediapools_json}"
     volume_slot=$(eval $cmd)
+    volume_slot=$(echo $volume_slot | sed -e 's/"//g')
 
     if [ $verbose -ge 3 ]; then
 	printf "${MAGENTA}Slot for volume_name ${GREEN}'%s'${MAGENTA} from media-pool ${GREEN}'%s'${MAGENTA}: ${NO_COLOR}%s${NO_COLOR}\n" \
@@ -433,7 +434,7 @@ mtx_getlabel () {
 		       "${MTX}" "${changer_device}" "${slot_source}"
 	    fi
 	    volume_name=$(perl -ne '
-	    	/Data Transfer Element (\d+):Full \(Storage Element (\d+) Loaded\)(:VolumeTag =\s*(.+))?/ && print "$4\n";' ${TMPFILE}) 
+	    	/Data Transfer Element (\d+):Full \(Storage Element (\d+) Loaded\)(:VolumeTag =\s*(.+))?/ && print "$4\n";' ${TMPFILE})
 	    	#/Data Transfer Element (\d+):Full \(Storage Element (\d+) Loaded\)(:VolumeTag =\s*(.+))?/ && print "Drive:$1:Slot:$2:$4\n";' ${TMPFILE}
 		;;
 	[0-9][0-8] | [0-9])
