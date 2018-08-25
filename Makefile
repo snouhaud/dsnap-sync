@@ -20,12 +20,12 @@ PKGNAME = dsnap-sync
 PREFIX ?= /usr
 SNAPPER_CONFIG ?= /etc/default/snapper
 SNAPPER_TEMPLATES ?= /etc/snapper/config-templates
-DSNAP_SYNC_EXAMPLES = /usr/share/doc/dsnap-sync
+DSNAP_SYNC_EXAMPLES = usr/share/doc/dsnap-sync
 
 BIN_DIR = $(DESTDIR)$(PREFIX)/bin
 ETC_DIR = $(DESTDIR)/etc
 SYSTEMD_DIR = $(DESTDIR)$(PREFIX)/lib/systemd/system
-DOC_DIR = $(DESTDIR)$(PREFIX)/share/doc/$(PKGNAME)
+DOC_DIR = $(DESTDIR)$(PREFIX)/share/doc/dsnap-sync
 
 .PHONY: install
 
