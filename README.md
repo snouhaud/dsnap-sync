@@ -1,5 +1,5 @@
 <!-- dsnap-sync README.md -->
-<!-- version: 0.5.7 -->
+<!-- version: 0.5.9 -->
 
 # dsnap-sync
 
@@ -26,7 +26,7 @@ secured with ssh.
 The tool is implemented as a posix shell script (dash), to keep the footprint
 small. `dsnap-sync` will support interactive and time scheduled backup processes.
 Scheduling should be implemented as a pair of systemd service and timer-units.
-The [example section](usr/share/doc/Examples.md#systemd)
+The [example section](usr/share/doc/dsnap-sync/Examples.md#systemd)
 will offer details as a reference point.
 
 ## Backup process
@@ -81,10 +81,12 @@ A scheduled process should be defined as a systemd.unit. Inside the unit
 definition the execution parameter will take the `dsnap-sync` call, appending
 all needed parameters as config options. In combination with a corresponding
 systemd.timer unit, you are able to finetune your backup needs.
-The [example section](usr/share/doc/Examples.md#systemd)
+The [example section](usr/share/doc/dsnap-sync/Examples.md#systemd)
 will offer details as a reference point.
 
 ## Requirements
+
+### dsnap-sync
 Beside the posix shell itself (e.g. `dash`), `dsnap-sync`relies on external
 tools to achieve its goal. At run-time their availability is checked.
 Following tools are used:
@@ -94,11 +96,24 @@ Following tools are used:
 - findmnt
 - sed
 - snapper
+- ssh
 
 As an option, you can enrich interactive responses using
 
 - notify-send
 - pv
+
+### tape-admin
+
+Beside the posix shell itself (e.g. `dash`), `dsnap-sync`relies on external
+tools to achieve its goal. At run-time their availability is checked.
+Following tools are used:
+
+- jq
+- ltfs
+- mkltfs
+- mtx
+- sed
 
 ## Installation
 
@@ -144,6 +159,7 @@ Please use your host software package manager.
       Options:
       -a, --automount <path>      start automount for given path to get a valid target mountpoint.
       -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
+	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
       -d, --description <desc>    Change the snapper description. Default: "latest incremental backup"
           --label-finished <desc> snapper description tagging successful jobs. Default: "dsnap-sync backup"
           --label-running <desc>  snapper description tagging active jobs. Default: "dsnap-sync in progress"
@@ -170,28 +186,28 @@ Please use your host software package manager.
                                   should specify the remote machine's hostname or ip address. The 'root' user must be
                                   permitted to login on the remote machine.
           --dry-run               perform a trial run where no changes are made.
-      -v, --verbose               Be more verbose on what's going on.
+      -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
           --version		          show program version
 
 ## First run
 
 If you have never synced to the paticular target device (first run), `dsnap-sync`
-will take care to create the necessary target filesystem-structure. Following 
+will take care to create the necessary target filesystem-structure. Following
 backup types are differenciated:
 
 * btrfs-snapshots
 
   This is the default backup type. `dsnap-sync` will use this type to sync
-  a btrfs-snapshot of an existing `snapper` configuration from a source 
-  device to a target device. On the target device the needed `snapper` 
-  structure will be build up as needed. Aside the new target filesystem 
+  a btrfs-snapshot of an existing `snapper` configuration from a source
+  device to a target device. On the target device the needed `snapper`
+  structure will be build up as needed. Aside the new target filesystem
   path, `dsnap-sync` will create a new target `snapper` configuration. It
   will incorporate the template (`/etc/snapper/config-templates/dsnap-sync`).
   To garantee unique configuration names, `dsnap-sync` take the source
-  configuration name and postfix it with targets hostname. You can adopt 
+  configuration name and postfix it with targets hostname. You can adopt
   this behaviour with a config option (`--config-postfix`).
 
-  The default `config-template` of dsnap-sync will inherit following 
+  The default `config-template` of dsnap-sync will inherit following
   `snapper` parameters:
 
   * mark new snapshots as type 'single'
@@ -216,21 +232,21 @@ backup types are differenciated:
 
   If the target device is not a btrfs filesystem (e.g. ext4,
   xfs, ltofs tapes), you need to use this backup type.
-  
+
   data are copied backupdir.
   `dsnap-sync` will take the data of the source snapshot-ID and copy them
   to an ordenary subdirectory. This Base-Directory will be located on the
-  target-device below the backupdir (target-subdirectory). Inside this 
+  target-device below the backupdir (target-subdirectory). Inside this
   'target-subdirectory' `dsnap-sync` will mimic the `snapper` structure:
 
   * the actual btrfs stream will we copied to a subdirectoy called `snapshot`
   * the proccess metadata are saved to a file called `info.xml`
-  
+
   If you enabled the `ltfs` package, support for backups to tape is possible.
   ltfs will prepare a tape, than can be mounted afterwards to a selectable
   mount-point. A `dsnap-sync` backup to this path will be handeld as type
   `btrfs-archive`.
-  
+
 ## Automounter
 
 `dsnap-sync` offer all mounted btrfs filesystems as valid process targets.
@@ -244,8 +260,29 @@ To link in  external disks dynamically, but also asure a persistent naming
 syntax, we can use them as auto-mountable targets. To wakeup the automount
 proccess before parsing available target disks, append the target mount-point
 as a config option to  `dsnap-sync` (e.g: `--automount /var/backups/archive-disk1`).
-The [example section](usr/share/doc/Examples.md#Automounter)
+The [example section](usr/share/doc/dsnap-sync/Examples.md#Automounter)
 will offer details as a reference point.
+
+## Tape-Administration / LTFS
+
+If you use `dsnap-sync` to archive snapshots on a tape, consider to use it
+in combination with LTFS. (Work in Progress: Initial support is tested
+with LTO7-Tapes in a Quantum SuperLoader3).
+
+The installation package will include a wrapper script `tape-admin`, which
+implements all common tasks that are needed for tape administration.
+If you are able to make use of a tape-changer (e.g Quantum SuperLoader3) the
+wrapper will take advantage of the `mtx` package to handle barcodes and slot
+management. If you create your own barcodes, please consult the documentation
+of your Loader-Device. Most likely they do support "Code 39"-Type labels.
+
+`LTFS` is an attempt to offer read and write-access functionality to serial
+tapes in a way that's common with hard drives. From LTO5 onwards, your are
+able to format/partition the tape with LTFS-Tools. After the successfull
+preparation the LTFS-Tape can be mounted to a selectable mountpoint (via
+FUSE). Read and write access can be managed using common OS tools.
+An open-source implementation can be found at
+[LinearTapeFileSystem](https://github.com/LinearTapeFileSystem/ltfs).
 
 ## Contributing
 

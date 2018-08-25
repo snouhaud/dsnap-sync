@@ -1,5 +1,5 @@
 <!-- dsnap-sync README.md -->
-<!-- version: 0.5.7 -->
+<!-- version: 0.5.9 -->
 
 # dsnap-sync
 
@@ -23,7 +23,7 @@ Mit Blick auf Portabilität und Ressourcen-Schonung wurde `dsnap-sync`als Posix
 Shell Script implementiert (dash). Es unterstützt sowohl interaktive als auch
 zeitgesteuerte Sicherungs-Prozesse. Zeitgesteuerte Sicherungen sollten als
 systemd Einheiten (service- und timer-units) implementiert werden.
-Für Details wird auf den [Beispiel-Abschnitt](usr/share/doc/Examples.md#systemd)
+Für Details wird auf den [Beispiel-Abschnitt](../../usr/share/doc/dsnap-sync/Examples.md#systemd)
 verweisen.
 
 ## Sicherungs-Prozess
@@ -58,7 +58,7 @@ benötigte Übertragungszeit erheblich.
 
 Ein interkativer Sicherungsprozess wird Ihnen die Auswahl eines
 Ziel-Gerätes anbieten. Sie können dieses Ziel-Gerät mit
-[Kommando-Zeilen Parametern](./README.md#Options) vorauswählen.
+[Kommando-Zeilen Parametern](./README.md#Optionen) vorauswählen.
 Um eine eindeutige Zuordung eines Ziel-Gerätes sicherzustellen,
 müssen sie entweder
 
@@ -86,9 +86,12 @@ als `dsnap-sync` Aufruf mit allen gewünschten Optionen eingestellt.
 In Verbindung mit einer zugehörigen systemd.timer Definition sind
 sie in der Lage, unterschiedliche Ausführungszeiten mit selektierten
 Optionen umzusetzen. Für Details wird auf den
-[Beispiel-Abschnitt](usr/share/doc/Examples.md#systemd) verweisen.
+[Beispiel-Abschnitt](../../usr/share/doc/dsnap-sync/Examples.md#systemd)
+verweisen.
 
 ## Anforderungen
+
+### dsnap-sync
 
 Neben der eigentlichen Posix Shell (e.g. `dash`), bedient sich
 `dsnap-sync` externer Tools, um die gewünschte Funktionalität
@@ -100,12 +103,26 @@ Folgende Tools werden verwendet:
 - findmnt
 - sed
 - snapper
+- ssh
 
 Optional können interaktive Rückmeldungen mit foldenen Tools ergänzt
 werden:
 
 - notify-send
 - pv
+
+### tape-admin
+
+Neben der eigentlichen Posix Shell (e.g. `dash`), bedient sich
+`tape-admin` externer Tools, um die gewünschte Funktionalität
+bereitzustellen. Deren Verfügbarkeit wird zur Laufzeit überprüft.
+Folgende Tools werden verwendet:
+
+- jq
+- ltfs
+- mkltfs
+- mtx
+- sed
 
 ## Installation
 
@@ -154,6 +171,7 @@ Software Paket Manager.
       Options:
       -a, --automount <path>      start automount for given path to get a valid target mountpoint.
       -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
+	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
       -d, --description <desc>    Change the snapper description. Default: "latest incremental backup"
           --label-finished <desc> snapper description tagging successful jobs. Default: "dsnap-sync backup"
           --label-running <desc>  snapper description tagging active jobs. Default: "dsnap-sync in progress"
@@ -180,7 +198,7 @@ Software Paket Manager.
                                   should specify the remote machine's hostname or ip address. The 'root' user must be
                                   permitted to login on the remote machine.
           --dry-run               perform a trial run where no changes are made.
-      -v, --verbose               Be more verbose on what's going on.
+      -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
           --version		          show program version
 
 ## Erster Sicherungslauf
@@ -262,8 +280,40 @@ einzubinden, können sie als 'automountbare Geräte' definiert werden.
 Aktiviert wird der Automount-Prozess vor der Ziel-Auswahl zu aktivieren,
 kannn der 'Mount-Point' als Option beim `dsnap-sync` Aufruf übergeben
 werden (z.B: `--automount /var/backups/archive-disk1`).
-Der [Abschnitt Automount](usr/share/doc/Examples.md#Automounter)
+Der [Abschnitt Automount](../../usr/share/doc/dsnap-sync/Examples.md#Automounter)
 des Beispiel Dokuments enthält weitere Details.
+
+## Tape-Administration / LTFS
+
+Wenn sie `dsnap-sync` für die Archivierung von Snapshots auf Bänder 
+verwenden, sollten den Einsatz in Kombination mit LTFS überdenken.
+(WIP - work in progress: Die erster erfolgreicher Versuch wurde mit
+LTO7-Bändern in einem Quantum SuperLoader3 getestet).
+
+Das Installations-Paket beinhaltet ein Hilfs-Skript `tape-admin`, das
+alle Basisaufgaben für die Administration von Bändern als Funktionen
+bereitstellt. Hardware, die einen mechanischen Bandwechsel ermöglicht 
+(z.B Quantum SuperLoader3), kann das Hilfs-Skript über das Paket `mtx`
+steuern. Dies beinhaltet das Auslesen von Barcodes als auch das Laden
+und Entladen von Bändern in wählbare Quell- und Ziel-Schächte (Slots).
+
+(WIP: Die Zuordnung von Band-Namen zu Pools und Slots neben deren
+Media-Zugriffsrichtlienen wird in einer JSON-Datei beschrieben.
+Diese muss derzeit noch manuell gepflegt werden: 
+`/etc/dsnap-sync/MediaPools.json`).
+
+Werden Barcode-Labels selbst erstellt, prüfen Sie bitte Hinweise auf das
+zu verwendende Format. Üblicherweise unterstützen die Barcode-Leser 
+"Code 39" Etiketten.
+
+`LTFS` ist ein Ansatz, der Lese- und Schreib-Operationen auf Bänder in 
+der für Festplatten üblichen Funktionsweise implementiert. Ab Geräten 
+der LTO5 Generation sind Sie in der Lage, Bänder für die LTFS-Nutzung
+vorzubareiten (formatieren, bzw. partitionieren).
+Anschließend können erfolgreich formatierte Bänder in das Dateisystem
+eingehängt werden (FUSE). Das Beschreiben und Auslesen der Daten erfolgt dann
+mit den gewohnten Betriebssystem Tools. Eine Open-Source Implementierung finden Sie z.B. unter 
+[LinearTapeFileSystem](https://github.com/LinearTapeFileSystem/ltfs).
 
 ## Mitarbeit
 
