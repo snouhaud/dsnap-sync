@@ -1,32 +1,38 @@
-{     
-  "MediaPools": "Daywalker-Pools",
-  "MediaPool": [ 
-    { 
-      "_comment": "MediaPool append",
-      "Name": "Pool 1",
-      "Member":[
-        { "VolumeName": "Tape-0001", "VolumeId": "000001", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0002", "VolumeId": "000002", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0003", "VolumeId": "000003", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0004", "VolumeId": "000004", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0005", "VolumeId": "000005", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0006", "VolumeId": "000006", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0007", "VolumeId": "000007", "MediaPolicy": "append" },
-        { "VolumeName": "Tape-0008", "VolumeId": "000008", "MediaPolicy": "append" }
-      ]
-    },
-    {
-      "_comment": "MediaPool overwrite",
-      "Name": "Pool 2",
-      "Member":[
-         { "VolumeName": "Tape-0009", "VolumeId": "000001", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" },
-         { "VolumeName": "Tape-0010", "VolumeId": "000002", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" },
-         { "VolumeName": "Tape-0011", "VolumeId": "000003", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" },
-         { "VolumeName": "Tape-0012", "VolumeId": "000004", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" },
-         { "VolumeName": "Tape-0013", "VolumeId": "000005", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" },
-         { "VolumeName": "Tape-0014", "VolumeId": "000006", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" },
-         { "VolumeName": "Tape-0015", "VolumeId": "000007", "MediaPolicy": "overwrite", "RetensionDate": "20182324T000000", "LastWrite": "20182224T09000" }
-      ]
-    }
-  ]
+{
+    "version": "0.0.4",
+    "_comment": "MediaPolicy: append, overwrite; Date values in UTC",
+    "MediaPools": "Media-Pools",
+    "MediaPool": [
+	{
+	    "Name": "Pool-1",
+	    "DefaultRetensionDays": "0",
+	    "Tape-Type": "LTO7",
+	    "_comment": "MediaPool append",
+	    "Member": [
+		{ "VolumeName": "Tape-0001", "VolumeId": "000001", "Slot": "1", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0002", "VolumeId": "000002", "Slot": "2", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0003", "VolumeId": "000003", "Slot": "3", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0004", "VolumeId": "000004", "Slot": "4", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0005", "VolumeId": "000005", "Slot": "5", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0006", "VolumeId": "000006", "Slot": "6", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0007", "VolumeId": "000007", "Slot": "7", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0008", "VolumeId": "000008", "Slot": "8", "MediaPolicy": "append", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" }
+	    ]
+	},
+	{
+	    "Name": "Pool-2",
+	    "DefaultRetensionDays": "7",
+	    "Tape-Type": "LTO7",
+	    "_comment": "MediaPool overwrite",
+	    "Member": [
+		{ "VolumeName": "Tape-0009", "VolumeId": "000009", "Slot": "9", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0010", "VolumeId": "000010", "Slot": "10", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0011", "VolumeId": "000011", "Slot": "11", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0012", "VolumeId": "000012", "Slot": "12", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0013", "VolumeId": "000013", "Slot": "13", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0014", "VolumeId": "000014", "Slot": "14", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" },
+		{ "VolumeName": "Tape-0015", "VolumeId": "000015", "Slot": "15", "MediaPolicy": "overwrite", "RetensionDate": "20180824000000", "LastWrite": "20180824000000" }
+	    ]
+	}
+    ]
 }
