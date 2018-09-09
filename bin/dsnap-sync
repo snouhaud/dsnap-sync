@@ -54,6 +54,8 @@ args=
 answer=no
 batch=0
 btrfs_quota=0
+#btrfs_verbose_flag=--verbose
+btrfs_verbose_flag=
 color=0
 donotify=0
 dryrun=0
@@ -104,7 +106,7 @@ check_prerequisites () {
 
     if [ $(id -u) -ne 0 ] ; then printf "$progname: must be run as root\n" ; exit 1 ; fi
 
-    if [ -z "$remote" ]; then
+    if [ -n "$remote" ]; then
 	$ssh which sh >/dev/null 2>&1 || \
 	    { printf "'remote shell' is not working!\n \
 	          Please correct your public authentication and try again.\n" && exit 1; }
@@ -118,9 +120,12 @@ check_prerequisites () {
 check_snapper_failed_ids () {
     local batch=${1:-0}
 
+    if [ $verbose -ge 3 ]; then
+	printf "${MAGENTA}check_snapper_failed_ids()...${NO_COLOR}\n"
+    fi
     # active, non finished snapshot backups are marked with a reasonable string
     # default: $(snap_description_running -> "$progname backup in progress" (userdata: host=$source)
-    snapper_failed_ids=$(eval snapper --config $selected_config list --type single \
+    snapper_failed_ids=$(snapper --config $selected_config list --type single \
 			     | awk '/'"$snap_description_running"'/ {cnt++} END {print cnt}')
     #snapper_failed_ids="snapper --config $selected_config list --type single \
     #	    | awk '/'"$snap_description_running"'/' \
@@ -135,13 +140,13 @@ check_snapper_failed_ids () {
 	    get_answer_yes_no "Delete failed backup snapshots [y/N]? " "$answer"
 	fi
 	if [ "$answer" = "yes" ]; then
-	    failed_id_first=$(eval snapper --config \"$selected_config\" list --type single \
+	    failed_id_first=$(snapper --config "$selected_config" list --type single \
 				  | awk -F '|' ' /'"$snap_description_running"'/' \
 				  | awk ' NR==1 {print $1} ')
-	    failed_id_last=$(eval snapper --config \"$selected_config\" list --type single \
+	    failed_id_last=$(snapper --config "$selected_config" list --type single \
 				 | awk -F '|' ' /'"$snap_description_running"'/' \
 				 | awk ' END {print $1} ')
-	    cmd="snapper --config \"$selected_config\" delete"
+	    cmd="snapper --config $selected_config delete"
 	    if [ $failed_id_first -lt $failed_id_last ]; then
 		$(eval $cmd $failed_id_first-$failed_id_last)
 	    else
@@ -325,7 +330,7 @@ get_disk_infos () {
     local fs_option
 
     if [ $verbose -ge 3 ]; then
-	printf "${BLUE}Get target_disk_infos()...${NO_COLOR}\n"
+	printf "${BLUE}get_disk_infos()...${NO_COLOR}\n"
     fi
 
     # wakeup automounter units
@@ -349,23 +354,38 @@ get_disk_infos () {
     fi
 
     # get mounted BTRFS infos
-    if [ "$(eval $ssh findmnt --noheadings --nofsroot --mountpoint / --output FSTYPE)" = "btrfs" ]; then
-	# root filesystem is excluded as a valid target location
-	exclude_uuid=$(eval $ssh findmnt --noheadings --nofsroot --mountpoint / --output UUID)
-	disk_uuids=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
-			 | grep -v $exclude_uuid \
+    if [ "$($ssh findmnt --noheadings --nofsroot --mountpoint / --output FSTYPE)" = "btrfs" ]; then
+	# target location is mounted as root subvolume
+	if [ -z $remote ]; then
+	    # local root filesystem will be excluded as a valid target location
+	    exclude_uuid=$(findmnt --noheadings --nofsroot --mountpoint / --output UUID)
+	    disk_uuids=$(findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+	    		 | grep -v $exclude_uuid \
 			 | awk '{print $1}')
-	disk_targets=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+	    disk_targets=$(findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
 			   | grep -v $exclude_uuid \
 			   | awk '{print $2}')
-	fs_options=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
+	    fs_options=$(findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
 			 | grep -v $exclude_uuid \
 			 | awk '{print $2}')
+	else
+	    # remote root filesystem will be excluded as a valid target location
+	    exclude_uuid=$($ssh findmnt --noheadings --nofsroot --mountpoint / --output UUID)
+	    disk_uuids=$($ssh "findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+	    		 | grep -v \"$exclude_uuid\" \
+			 | awk '{print \$1}'")
+	    disk_targets=$($ssh "findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
+			   | grep -v \"$exclude_uuid\" \
+			   | awk '{print \$2}'")
+	    fs_options=$($ssh "findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
+			 | grep -v \"$exclude_uuid\" \
+			 | awk '{print \$2}'")
+        fi
     else
-	# target location is not mounted as root
-	disk_uuids=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID --list)
-	disk_targets=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output TARGET --list)
-	fs_options=$(eval $ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | awk '{print $2}')
+	# target location is not mounted as root subvolume
+	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID --list)
+	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output TARGET --list)
+	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | awk '{print $2}')
     fi
 
     # we need at least one target disk
@@ -406,7 +426,7 @@ get_disk_infos () {
     done
     i=0
     for fs_option in $fs_options; do
-	subvolid=$(eval echo \$fs_option | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
+	subvolid=$(echo \$fs_option | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
 	if [ "$subvolid" = "$subvolid_cmdline" ]; then
 	    disk_subvolid_match="$i"
 	    disk_subvolid_match_count=$(($disk_subvolid_match_count+1))
@@ -438,22 +458,22 @@ get_snapper_config_type () {
 
     # WIP -> create a PR for snapper
     # Patch snapper to parse for new pairs:  CONFIG_TYPE="child | root"; CONFIG_PARENT="<string>"
-    ##config_type=$(eval snapper --config $1 get-config | awk '/'"CONFIG_PARENT=$snap_description_running"'/ {cnt++} END {print cnt}')
+    ##config_type=$(snapper --config $1 get-config | awk '/'"CONFIG_PARENT=$snap_description_running"'/ {cnt++} END {print cnt}')
     # for now, we cut an parse ourself
     IFS="="
     while read -r key value
     do
 	case $key in
 	    CONFIG_TYPE)
-		snapper_config_type=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+		snapper_config_type=$(echo $value | sed -e 's/\"\(.*\)\"/\1/')
 		continue
 		;;
 	    CHILD_CONFIG)
-		snapper_target_config=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+		snapper_target_config=$(echo $value | sed -e 's/\"\(.*\)\"/\1/')
 		continue
 		;;
 	    PARENT_CONFIG)
-		snapper_parent_config=$(eval echo $value | sed -e 's/\"\(.*\)\"/\1/')
+		snapper_parent_config=$(echo $value | sed -e 's/\"\(.*\)\"/\1/')
 		continue
 		;;
 	    *)
@@ -506,7 +526,7 @@ get_snapper_last_sync_id () {
     local run_ssh=''
 
     snapper_sync_id=0
-    [ ${#remote} -gt 0 ] && run_ssh=$ssh
+    if [ ${#remote} -ge 1 ];then run_ssh=$ssh; fi
 
     if [ $verbose -ge 3 ]; then
 	printf "${MAGENTA}get_snapper_last_sync_id()...${NO_COLOR}\n"
@@ -536,31 +556,35 @@ get_snapper_last_sync_id () {
 		   $snapper_config
 	fi
     fi
-    if [ -z $snapper_uuid ] && [ -z $snapper_subvolid ]; then
-	snapper_sync_id=$(eval $run_ssh snapper --config "$snapper_config" list --type single | \
-			      awk '/'"$snapper_description"'/' | \
-			      awk 'END {print $1}' )
+    if [ ${#snapper_subvolid} -ge 1 -a ${#snapper_uuid} -ge 1 ]; then
+    	cmd="snapper --config $snapper_config list --type single \
+	     | awk '/$snapper_description/' \
+	     | awk '/subvolid=$snapper_subvolid, uuid=$snapper_uuid/' \
+	     | awk 'END {print \$1}'"
     else
-	snapper_sync_id=$(eval $run_ssh snapper --config "$snapper_config" list --type single | \
-			      awk '/'"$snapper_description"'/' | \
-			      awk '/subvolid='"$snapper_subvolid"'/, /uuid='"$snapper_uuid"'/' | \
-			      awk 'END {print $1}')
+	cmd="snapper --config $snapper_config list --type single \
+	     | awk '/$snapper_description/' \
+	     | awk 'END {print \$1}'"
     fi
+    snapper_sync_id=$(eval $run_ssh "$cmd")
+
     if [ ${#snapper_sync_id} -ge 1 ]; then
 	# ok, matching snapshot found
 	snapper_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
     else
-	# no snapshot found, try for latest finished sync
-	if [ -z $snapper_uuid ] && [ -z $snapper_subvolid ]; then
-	    snapper_sync_id=$(eval $run_ssh snapper --config "$snapper_config" list --type single | \
-				  awk '/'"$snap_description_finished"'/' | \
-				  awk 'END {print $1} ')
+	# no snapshot found, try grap latest successfull sync
+	if [ ${#snapper_subvolid} -ge 1 -a ${#snapper_uuid} -ge 1 ]; then
+	    cmd="snapper --config $snapper_config list --type single \
+	    	| awk '/$snap_description_finished/' \
+	    	| awk '/subvolid=$selected_subvol, uuid=$selected_uuid/' \
+		| awk 'END {print \$1}'"
 	else
-	    snapper_sync_id=$(eval $run_ssh snapper --config "$snapper_config" list --type single | \
-				  awk '/'"$snap_description_finished"'/' | \
-				  awk '/subvolid='"$snapper_subvolid"'/, /uuid='"$snapper_uuid"'/' | \
-				  awk 'END {print $1}')
+	    cmd="snapper --config $snapper_config list --type single \
+	    	 | awk '/$snap_description_finished/' \
+		 | awk 'END {print \$1}'"
 	fi
+	snapper_sync_id=$(eval $run_ssh "$cmd")
+
 	if [ ${#snapper_sync_id} -ge 1 ]; then
 	    # ok, matching snapshot found
 	    snapper_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
@@ -594,9 +618,9 @@ get_snapper_sync_id () {
     [ ${#remote} -gt 0 ] && run_ssh=$ssh
 
     cmd="snapper --config "$snapper_config" list --type single \
-    	 | awk -F '|' '\$1 == "$snapper_sync_id" {print \$1}' "
-    ret=$(eval $run_ssh snapper --config "$snapper_config" list --type single \
-	      | awk -F '|' '$1 == '"$snapper_sync_id"' {gsub(" ",""); print $1}')
+    	 | awk -F '|' '\$1 == "$snapper_sync_id" { gsub(/ /, \'\'); print \$1}'"
+
+    ret=$(eval $run_ssh "$cmd")
     printf "ret: '%s'\n" $ret
     if [ ${#ret} -ge 1 ]; then
 	# ok, matching snapshot found
@@ -653,7 +677,7 @@ parse_params () {
 		shift 2
 		;;
 	    -c|--config)
-		if [ ${#selected_config} -gt 0 ]; then
+		if [ ${#selected_configs} -gt 0 ]; then
 		    selected_configs="${selected_configs} ${2}"
 		else
 		    selected_configs="$2"
@@ -876,7 +900,7 @@ parse_params () {
     if [ -z "$remote" ]; then
 	ssh=""
     else
-	ssh="ssh $remote"
+	ssh="ssh -T $remote"
 	if [ ! -z "$port" ]; then
 	    ssh="$ssh -p $port"
 	fi
@@ -974,7 +998,8 @@ run_config_preparation () {
 	case $snapper_config_type in
 	    btrfs-snapshot)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=${selected_uuid}" "snapper_subvolid=${selected_subvol}" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "remote="
+					 #"snapper_uuid=${selected_uuid}" "snapper_subvolid=${selected_subvol}" "remote="
 		;;
 	    btrfs-clone)
 		if [ $verbose -ge 3 ]; then
@@ -1018,6 +1043,7 @@ run_config_preparation () {
 	    get_snapper_last_sync_id "snapper_config=${snapper_target_config}" \
 				     "snapper_description=${snap_description_synced}" \
 				     "snapper_uuid=" "snapper_subvolid=" "remote=${remote}"
+				     #"snapper_uuid=" "snapper_subvolid=" "remote=${remote}"
 	    snapper_target_sync_id=$snapper_sync_id
 	    if [ $snapper_target_sync_id -eq 0 ]; then
 		if [ $verbose -ge 2 ]; then
@@ -1069,14 +1095,14 @@ run_config_preparation () {
 	eval "backup_root_$i='$backup_root'"
 
 	cont_backup="K"
-	eval "snapper_activate_$i=yes"
+	eval "snapper_activate_$i='yes'"
 	if [ $batch ]; then
 	    cont_backup="yes"
 	else
 	    answer=yes
 	    get_answer_yes_no "Continue with backup [Y/n]? " "$answer"
 	    if [ "$answer" = "no" ]; then
-		eval "snapper_activate_$i=no"
+		snapper_activate_$i="no"
 		printf "Aborting backup for this configuration.\n"
 		#snapper --config $selected_config delete $snapper_sync_id
 	    fi
@@ -1105,7 +1131,7 @@ run_backup () {
 	    die "Selected snapper configuration '$selected_config' does not exist."
 	fi
 
-	cont_backup=$(eval echo \$snapper_activate_$i)
+	cont_backup=$(echo \$snapper_activate_$i)
 	if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
 	    if [ $donotify -gt 0 ]; then
 		notify_info "Backup in progress" "NOTE: Skipping '$selected_config' configuration."
@@ -1164,47 +1190,50 @@ run_backup () {
 		;;
 	esac
 
-	# report correct subvolume size via btrfs quota
-	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
-		   "$snapper_source_id" "$snapper_source_snapshot"
-	fi
+	if [ "$interactive" -eq 1  ]; then
+	    if [ $verbose -ge 2 ]; then
+		printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
+		       "$snapper_source_id" "$snapper_source_snapshot"
+	    fi
 
-	if [ $btrfs_quota -eq 1 ]; then
-	    # qgroup for given path, exclude ancestrals
-	    # qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
-	    snapper_source_snapshot_size=$(eval btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
+	    if [ $btrfs_quota -eq 1 ]; then
+		# qgroup for given path, exclude ancestrals
+		# qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
+		snapper_source_snapshot_size=$(btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
 					       | awk 'FNR>2 {print $2}')
-	    if [ $verbose -ge 3 ]; then
-	        printf "${MAGENTA}BTRFS qgroup show result: ${GREEN}'%s'\b${NO_COLOR}'%s'\n" \
-	    	       "$?" "$snapper_source_snapshot_size"
-	    fi
-	    #if [ $? -eq 1 ]; then
-	    # subvolume is not configured for quota, (temporary?) enable that
-	    #btrfs_quota_tmp=1
-	    #btrfs quota enable $snapper_source_snapshot 2>/dev/null
-	    #btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
-	    #fi
+		if [ $verbose -ge 3 ]; then
+	            printf "${MAGENTA}BTRFS qgroup show result: ${GREEN}'%s'\b${NO_COLOR}'%s'\n" \
+	    		   "$?" "$snapper_source_snapshot_size"
+		fi
+		#if [ $? -eq 1 ]; then
+		# subvolume is not configured for quota, (temporary?) enable that
+		#btrfs_quota_tmp=1
+		#btrfs quota enable $snapper_source_snapshot 2>/dev/null
+		#btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
+		#fi
 
-	    # need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
-	    if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
-	        snapper_source_snapshot_size=$(eval btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
-						   | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
-	    fi
-	    if [ $verbose -ge 2 ]; then
-	        printf "${MAGENTA}BTRFS quota size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapper_source_id" "$snapper_source_snapshot_size"
-	    fi
+		# need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
+		if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+	            snapper_source_snapshot_size=$(btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
+						       | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
+		fi
+		if [ $verbose -ge 2 ]; then
+	            printf "${MAGENTA}BTRFS quota size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
+			   "$snapper_source_id" "$snapper_source_snapshot_size"
+		fi
 
-	    # should we disable quota usage again?
-	    #if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
-	else
-	    snapper_source_snapshot_size=$(du --sum $snapper_source_snapshot 2>/dev/null \
-					       | awk -F ' ' '{print $1}')
-	    snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
-	    if [ $verbose -ge 2 ]; then
-	        printf "${MAGENTA}BTRFS subvolume size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapper_source_id" "$snapper_source_snapshot_size"
+		# should we disable quota usage again?
+		#if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
+	    else
+		snapper_source_snapshot_size=$(du --sum $snapper_source_snapshot 2>/dev/null \
+						   | awk -F ' ' '{print $1}')
+		if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+		    snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
+		fi
+		if [ $verbose -ge 2 ]; then
+	            printf "${MAGENTA}BTRFS subvolume size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
+			   "$snapper_source_id" "$snapper_source_snapshot_size"
+		fi
 	    fi
 	fi
 
@@ -1217,7 +1246,7 @@ run_backup () {
 	    cmd_pv=''
 	fi
 
-	cmd="btrfs send $verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+	cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE | $cmd_pv $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
 	if [ "$dryrun" -eq 0 ]; then
 	    if [ "$snapper_source_sync_id" -eq 0 ] || [ "$snapper_target_sync_id" -eq 0 ]; then
 	        # target never received any snapshot before
@@ -1232,7 +1261,7 @@ run_backup () {
 		fi
 		$(eval $cmd) 1>/dev/null
 		if [ "$?" -gt 0 ]; then
-		    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
+		    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_PIPE)"
 		    die "btrfs pipe error."
 		fi
 	    else
@@ -1256,7 +1285,7 @@ run_backup () {
 		    #if [ $snapper_target_sync_id -lt $snapper_source_sync_id ]; then
 		    if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
 			# select commen sync id
-		        ret=$(eval get_snapper_sync_id "snapper_config=${snapper_source_config}" "snapper_sync_id=$snapper_target_sync_id" "remote=")
+		        ret=$(get_snapper_sync_id "snapper_config=${snapper_source_config}" "snapper_sync_id=$snapper_target_sync_id" "remote=")
 		        if [ $ret ]; then
 			    snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
 		        else
@@ -1273,8 +1302,8 @@ run_backup () {
 		    # subvolume on the source and the receiving location (the parent-id).
 		    # using "btrfs send -p" instead of "btrfs send -c", then no parent search would be
 		    # needed (Andreij explained in: https://www.spinics.net/lists/linux-btrfs/msg69369.html)
-		    cmd="btrfs send $verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
-			   | $cmd_pv $ssh btrfs receive $verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+		    cmd="btrfs send $btrfs_verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+			   | $cmd_pv $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
 		    if [ $verbose -ge 3 ]; then
 		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}source${NO_COLOR} to sync metadata for new snapshot ${GREEN}'%s'${NO_COLOR} ...\n" \
 			       "$snapper_source_sync_snapshot" "$snapper_source_snapshot"
@@ -1282,7 +1311,7 @@ run_backup () {
 		    fi
 		    eval $cmd 1>/dev/null
 		    if [ "$?" -gt 0 ]; then
-			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(eval cat $BTRFS_PIPE)"
+			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_PIPE)"
 			die "btrfs pipe error."
 		    fi
 	        else
@@ -1316,7 +1345,7 @@ run_backup () {
 		   "$snapper_source_info"
 	fi
 
-	# Save config specific values in pseudo Array
+	# Save config specific values in pseudo arrays
 	eval "snapper_source_id_$i='$snapper_source_id'"
 	eval "snapper_source_snapshot_$i='$snapper_source_snapshot'"
 	eval "snapper_source_info_$i='$snapper_source_info'"
@@ -1369,7 +1398,7 @@ run_finalize () {
             die "Selected snapper configuration '$selected_config' does not exist."
 	fi
 
-	cont_backup=$(eval echo \$snapper_activate_$i)
+	cont_backup=$(echo \$snapper_activate_$i)
 	if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
 	    if [ $donotify -gt 0 ]; then
 		notify_info "Finalize backup" "NOTE: Skipping '$selected_config' configuration."
@@ -1399,9 +1428,9 @@ run_finalize () {
 	# which is stored in snappers info.xml file of the source snapshot.
 	# This is how we find the parent.
 
-	src_host=$(eval cat /etc/hostname)
-	src_uuid=$(eval findmnt --noheadings --output UUID --target $SUBVOLUME)
-	src_subvolid=$(eval findmnt --noheadings --output OPTIONS --target $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
+	src_host=$(cat /etc/hostname)
+	src_uuid=$(findmnt --noheadings --output UUID --target $SUBVOLUME)
+	src_subvolid=$(findmnt --noheadings --output OPTIONS --target $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
 
 	# Tag new snapshots key/value parameter
 	if [ $verbose -ge 2 ]; then
@@ -1424,7 +1453,12 @@ run_finalize () {
 	    local ii_sleep=15
 
 	    # Solution2: kill running snapperd
-	    #            -> will restart and sync; any unseen interdependencies?
+	    #            -> will restart and sync; any unseen interdependencies
+	    snapperd_pid=$(eval $ssh pgrep snapperd)
+	    if [ $verbose -ge 3 ]; then
+		printf "${MAGENTA}Kill runnint ${GREEN}snapperd${MAGENTA} on target id:${GREEN}'%s'${NO_COLOR} ...\n" \
+		       "$snapperd_pid"
+	    fi
 	    $(eval $ssh killall -SIGTERM snapperd)
 
 	    if [ $verbose -ge 3 ]; then
@@ -1444,18 +1478,18 @@ run_finalize () {
 		    ;;
 		btrfs-snapshot)
 		    # create btrfs-snapshot on target
-	            cmd="$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
+	            cmd="$ssh snapper --config \"$snapper_target_config\" list --type single \
 	    	      | awk ' /'\"$snap_description_running\"'/ ' \
-		      | awk -F '|' ' \$1 == $snapper_target_sync_id {print \$1} ' "
+		      | awk -F '|' ' \$1 == $snapper_target_id {print \$1} ' "
 		    ;;
 	    esac
 
 	    while [ "$ii" -le  "$ii_max" ]; do
 		if [ $verbose -ge 3 ]; then
-		    printf "calling: '%s'\n" "$(eval $cmd)"
+		    printf "calling: '%s'\n" "$cmd"
 		fi
-		ret=$(eval $cmd)
-		#ret=$ssh snapper --verbose --config \"$snapper_target_config\" list --type single \
+		ret=$(eval "$cmd")
+		#ret=$ssh snapper --config \"$snapper_target_config\" list --type single \
 		    #   | awk ' /'\"$snap_description_running\"'/ ' \
 		    #   | awk -F '|' ' $1 == "$snapper_target_sync_id" {print $1} '
 		#printf "return: '%s'\n" "$?"
@@ -1470,7 +1504,7 @@ run_finalize () {
  			if [ $verbose -ge 3 ]; then
 			    printf "${MAGENTA}Tagging metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
 				   "$snapper_target_id" "$snapper_target_config"
-			    #printf "calling: '%s'\n" "$(eval $cmd)"
+			    #printf "calling: '%s'\n" "$($cmd)"
 			fi
 
 			# call command (respect needed quotes)
@@ -1481,7 +1515,7 @@ run_finalize () {
 			    	       --cleanup-algorithm \'timeline\' \
 			    	       \'$snapper_target_id\')
 			else
-			    ret=$(snapper --config $snapper_target_config modify \
+			    ret=$(eval snapper --config $snapper_target_config modify \
 			    		  --description "$snap_description_finished" \
 					  --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
 					  --cleanup-algorithm "timeline" \
@@ -1510,15 +1544,15 @@ run_finalize () {
 	    if [ $snapper_source_id -gt 0 ]; then
 		cmd="snapper --config $selected_config modify \
 		 	     --description \"$snap_description_synced\" \
-			     --userdata \"backupdir=$backupdir, host=$remote, subvolid=$selected_subvol, uuid=$selected_uuid\" \
+			     --userdata \"backupdir=$backupdir, important=yes, host=$remote, subvolid=$selected_subvol, uuid=$selected_uuid\" \
 			     --cleanup-algorithm \"timeline\" \
 			     $snapper_source_id"
 
 		if [ $verbose -ge 3 ]; then
 		    printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
 			   "$snapper_source_id" "$selected_config"
-		    # printf "calling: '%s'\n" "$(eval $cmd)"
-		    printf "calling: '%s'\n" "$cmd"
+		    # printf "calling: '%s'\n" "$($cmd)"
+		    printf "calling: '%s'\n" "$(eval $cmd)"
 		fi
 		ret=$(eval "$cmd")
 		if [ $verbose -ge 3 ]; then
@@ -1527,8 +1561,10 @@ run_finalize () {
 		sync
 	    fi
 	    if [ ${#snapper_source_sync_id} -gt 0 ]; then
+		# TODO: no method to remove userdata pair, use awk
 		cmd="snapper --config $selected_config modify \
 			     --description \"$snap_description_finished\" \
+			     --userdata \"important=no\" \
 			     $snapper_source_sync_id"
 
 		if [ $verbose -ge 3 ]; then
@@ -1618,7 +1654,7 @@ select_target_disk () {
 	    while [ "$disk_id" -le $disk_count ]; do
 		# present all mounted BTRFS filesystems
 		# Pseudo-Array: disk_selected_$i (reference to $disk_id element)
-		eval disk_selected_$i="$disk_id"
+		eval "disk_selected_$i='$disk_id'"
 		disk=$(eval echo \$disk_uuid_$disk_id)
 		target=$(eval echo \$disk_target_$disk_id)
 		fs_options=$(eval echo \$fs_options_$disk_id | sed -e 's/.*,\(subvolid=[0-9]*\).*,\(subvol=[0-9]*\)/\1,\2/')
@@ -1789,7 +1825,7 @@ verify_archive_structure () {
 		fi
 	    fi
 	    if [ $dryrun -eq 0 ]; then
-		$(eval $ssh mkdir --mode=0700 --parents $backup_root)
+		$($ssh mkdir --mode=0700 --parents $backup_root)
 	    else
 		if [ -z $remote_host ]; then
 		    printf "dryrun: Would create backup-path %s ...\n" \
@@ -1823,7 +1859,7 @@ verify_archive_structure () {
 		       "$backup_root/$snapper_config/$snapper_id"
 	    fi
 
-	    $(eval $ssh mkdir --mode=0700 \
+	    $($ssh mkdir --mode=0700 \
 		   $backup_root/$snapper_config/$snapper_id)
 	    if [ $? -ne 0 ]; then
 		printf "${RED}Cancel path snapshot creation${NO_COLOR}: Can't create path '%s' to store target snapshot.\n" \
@@ -1898,7 +1934,7 @@ verify_snapper_config () {
 	if [ "$SUBVOLUME" = "/" ]; then
 	    SUBVOLUME=''
 	fi
-	count=$(eval snapper --config $selected_config list --type single | \
+	count=$(snapper --config $selected_config list --type single | \
 		    awk '/'"$snap_description_synced"'/' | \
 		    awk '/subvolid='"$selected_subvol"'/, /uuid='"$selected_uuid"'/ {cnt++} END {print cnt}')
 	if [ -n "$count" ] && [ "$count" -gt 1 ]; then
@@ -1908,7 +1944,7 @@ verify_snapper_config () {
 		   "$selected_uuid" "$selected_subvol" "$selected_config"
 	    printf "Please cleanup for further processing.\n"
 	    error "Skipping configuration $selected_config."
-	    selected_configs=$(echo $selected_configs | sed -e "s/\($selected_config\)//")
+	    selected_configs=$(eval echo  $selected_configs | sed -e "s/\($selected_config\)//")
 	    continue
 	fi
     fi
@@ -1946,7 +1982,7 @@ verify_snapper_structure () {
 	    # strip last dir from backup_root
 	    base_path=${backup_root%/*}; echo $base_path
 	    if [ $dryrun -eq 0 ]; then
-		$(eval $ssh mkdir --mode=0700 --parents $base_path)
+		$($ssh mkdir --mode=0700 --parents $base_path)
 		if [ $verbose -ge 3 ]; then
 		    if [ -z $remote_host ]; then
 			printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR}...\n" \
@@ -2003,11 +2039,11 @@ verify_snapper_structure () {
 
 	    # create the non existing remote BTRFS subvolume for given snapshot
 	    #cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshot 1>/dev/null"
-	    #$(eval $cmd) || \
+	    #$($cmd) || \
 		#	die "Creation of BTRFS subvolume (snapshot): %s:%s failed.\n" \
 		#	    "$remote_host" "$backup_root" "$remote_host"
 	    #   cmd="$ssh chmod 0700 $backup_root 1>/dev/null"
-	    #   $(eval $cmd) || \
+	    #   $($cmd) || \
 		#	die "Changing the directory mode for '$backup_root' on '$remote_host'."
 	else
 	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
@@ -2114,7 +2150,7 @@ verify_snapper_structure () {
 		       "$backup_root/$snapper_snapshots/$snapper_id"
 	    fi
 
-	    $(eval $ssh mkdir --mode=0700 \
+	    ret=$(eval $ssh mkdir --mode=0700 \
 		   $backup_root/$snapper_snapshots/$snapper_id)
 	    if [ $? -ne 0 ]; then
 		printf "${RED}Cancel path snapshot creation${NO_COLOR}: Can't create path '%s' to store target snapshot.\n" \
