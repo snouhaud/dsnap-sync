@@ -738,8 +738,7 @@ get_snapper_last_sync_id () {
 
 get_snapper_sync_id () {
     local snapper_config=${1#snapper_config=}
-    snapper_sync_id=${2##snapper_sync_id=}
-    local remote=${3##remote=}
+    local remote=${2##remote=}
     local run_ssh=''
     local ret=
 
@@ -759,7 +758,7 @@ get_snapper_sync_id () {
     [ ${#remote} -gt 0 ] && run_ssh=$ssh
 
     cmd="snapper --config "$snapper_config" list --type single \
-    	 | awk -F '|' '\$1 == "$snapper_sync_id" { gsub(/ /,_); print \$1}'"
+    	 | awk -F '|' ' \$1 == $snapper_sync_id { gsub(/ /,_); print \$1} '"
 
     ret=$(eval $run_ssh "$cmd")
     if [ ${#ret} -ge 1 ]; then
@@ -1230,7 +1229,7 @@ run_config_preparation () {
 	    if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
 
 		# select commen sync id
-		get_snapper_sync_id "snapper_config=${selected_config}" "snapper_sync_id=$snapper_target_sync_id" "remote="
+		get_snapper_sync_id "snapper_config=${selected_config}" "remote="
 		if [ $? -eq 0 ]; then
 		    snapper_common_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
 		    snapper_common_sync_id=$snapper_sync_id
@@ -1770,10 +1769,6 @@ run_finalize () {
 		    printf "calling: '%s'\n" "$cmd"
 		fi
 		ret=$(eval "$cmd")
-		#ret=$ssh snapper --config \"$snapper_target_config\" list --type single \
-		    #   | awk ' /'\"$snap_description_running\"'/ ' \
-		    #   | awk -F '|' ' $1 == "$snapper_target_sync_id" {print $1} '
-		#printf "return: '%s'\n" "$?"
 		if [ $? -eq 0 ]; then
 		    if [ $ret -eq $snapper_target_id ]; then
 			# got snapshot as $snapper_target_id
@@ -1801,7 +1796,6 @@ run_finalize () {
 					  --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
 					  --cleanup-algorithm "timeline" \
 			     		  $snapper_target_id)
-
 			fi
 			if [ $verbose -ge 3 ]; then
 			    printf "return: '%s'\n" "$ret"
@@ -1832,8 +1826,8 @@ run_finalize () {
 		if [ $verbose -ge 3 ]; then
 		    printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
 			   "$snapper_source_id" "$selected_config"
-		    # printf "calling: '%s'\n" "$($cmd)"
-		    printf "calling: '%s'\n" "$(eval $cmd)"
+		    #printf "calling: '%s'\n" "$(eval $cmd)"
+		    printf "calling: '%s'\n" "$cmd"
 		fi
 		ret=$(eval "$cmd")
 		if [ $verbose -ge 3 ]; then
