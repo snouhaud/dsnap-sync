@@ -1749,6 +1749,13 @@ run_finalize () {
 			    printf "return: '%s'\n" "$?"
 			fi
 			sync
+
+			# update tape attributes
+			if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
+			    # read mounted LTFS structures
+			    tape-admin --verbose=$verbose --update-lastwrite ${mediapool_name} ${volume_name}
+			    tape-admin --verbose=$verbose --update-retensiondate ${mediapool_name} ${volume_name}
+			fi
 		    fi
 		    return 0
 		    ;;
@@ -2775,7 +2782,6 @@ fi
 
 # select the backup target
 select_target
-#select_target_disk
 
 # create and initialize structures for snapper configs
 run_config_preparation
