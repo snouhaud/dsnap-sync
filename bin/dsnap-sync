@@ -27,7 +27,7 @@
 # difference for the next incremental snapshot.
 
 progname="${0##*/}"
-version="0.5.9.3"
+version="0.5.9.4"
 
 # The following lines are modified by the Makefile or
 # find_snapper_config script
@@ -37,8 +37,9 @@ SNAPPER_TEMPLATE_DIR=/etc/snapper/config-templates
 SNAPPER_CONFIG_DIR=/etc/snapper/configs
 
 # define fifo pipes
-TMPDIR_PIPE=$(mktemp -d)
+TMPDIR_PIPE=$(mktemp --tmpdir=$XDG_RUNTIME_DIR/$progname -d)
 PIPE=$TMPDIR_PIPE/$progname.out
+test ! -d $XDG_RUNTIME_DIR/$progname && mkdir -p $XDG_RUNTIME_DIR/$progname
 mkfifo $PIPE
 systemd-cat --identifier="$progname" < $PIPE &
 
@@ -61,18 +62,19 @@ color=0
 donotify=0
 dryrun=0
 #disk_count=-1
-#disk_uuid_match_count=0
+disk_uuid_match_count=0
 #disk_target_match_count=0
 disk_subvolid_match_count=0
 disk_uuid_match=''
 ltfs_mountpoint="/media/tape"
-target_count=-1
+target_count=0
 target_match_count=0
 tape_match=''
 interactive=1
-selected_uuid='none'
-selected_target='none'
+selected_configs=0
 selected_subvol='none'
+selected_target='none'
+selected_uuid='none'
 snapper_sync_id=0
 snapper_snapshots=".snapshots"  # hardcoded in snapper
 snapper_subvolume_template="dsnap-sync"
@@ -98,14 +100,15 @@ check_prerequisites () {
     # requested binaries:
     which awk >/dev/null 2>&1 || { printf "'awk' is not installed." && exit 1; }
     which sed >/dev/null 2>&1 || { printf "'sed' is not installed." && exit 1; }
-    #which tee >/dev/null 2>&1 || { printf "'tee' is not installed." && exit 1; }
+    which ssh >/dev/null 2>&1 || { printf "'ssh' is not installed." && exit 1; }
+    which scp >/dev/null 2>&1 || { printf "'scp' is not installed." && exit 1; }
     which btrfs >/dev/null 2>&1 || { printf "'btrfs' is not installed." && exit 1; }
     which findmnt >/dev/null 2>&1 || { printf "'findmnt' is not installed." && exit 1; }
     which systemd-cat >/dev/null 2>&1 || { printf "'systemd-cat' is not installed." && exit 1; }
     which snapper >/dev/null 2>&1 || { printf "'snapper' is not installed." && exit 1; }
-    #which wc >/dev/null 2>&1 || { printf "'wc' is not installed." && exit 1; }
 
     # optional binaries:
+    which attr >/dev/null 2>&1 || { printf "'attr' is not installed." && exit 1; }
     which notify-send >/dev/null 2>&1 && { donotify=1; }
     which pv >/dev/null 2>&1 && { do_pv_cmd=1; }
     which tape-admin >/dev/null 2>&1 && { tape_admin_cmd=1; }
@@ -124,7 +127,8 @@ check_prerequisites () {
 }
 
 check_snapper_failed_ids () {
-    local batch=${1:-0}
+    local selected_config=${1}
+    local batch=${2:-0}
 
     if [ $verbose -ge 3 ]; then
 	printf "${MAGENTA}check_snapper_failed_ids()...${NO_COLOR}\n"
@@ -278,7 +282,7 @@ get_archive_last_sync_id () {
 		;;
 	esac
     fi
-    
+
     ret=$(eval $run_ssh "$cmd" 2>/dev/null)
     if [ ${#ret} -ge 1 ]; then
 	snapper_sync_id=$ret
@@ -548,25 +552,21 @@ get_disk_infos () {
 	fi
 	eval "disk_uuid_$i='$disk_uuid'"
 	eval "fs_type_$i='btrfs'"
-	#disk_count=$(($disk_count+1))
 	target_count=$(($target_count+1))
 	i=$((i+1))
     done
     i=0
     for disk_target in $disk_targets; do
 	if [ "$disk_target" = "$target_cmdline" ]; then
-	    #disk_target_match="$i"
-	    #disk_target_match_count=$(($disk_target_match_count+1))
 	    target_match="$i"
 	    target_match_count=$(($target_match_count+1))
 	fi
-	#eval "disk_target_$i='$disk_target'"
 	eval "target_$i='$disk_target'"
 	i=$((i+1))
     done
     i=0
     for fs_option in $fs_options; do
-	subvolid=$(echo \$fs_option | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
+	subvolid=$(eval echo \$fs_option | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
 	if [ "$subvolid" = "$subvolid_cmdline" ]; then
 	    disk_subvolid_match="$i"
 	    disk_subvolid_match_count=$(($disk_subvolid_match_count+1))
@@ -800,6 +800,7 @@ parse_params () {
     #printf "\n${BLUE}Parse arguments...${NO_COLOR}\n"
 
     # Evaluate given call parameters
+    i=0
     while [ $# -gt 0 ]; do
 	key="$1"
 	case $key in
@@ -820,11 +821,10 @@ parse_params () {
 		shift 2
 		;;
 	    -c|--config)
-		if [ ${#selected_configs} -gt 0 ]; then
-		    selected_configs="${selected_configs} ${2}"
-		else
-		    selected_configs="$2"
-		fi
+		# Pseudo-Array: selected_config_$i
+		eval "selected_config_$i='${2}'"
+		i=$(($i+1))
+		selected_configs=$i
 		shift 2
 		;;
 	    --color)
@@ -942,11 +942,10 @@ parse_params () {
 		shift
 		;;
 	    --config=*)
-		if [ ${#selected_config} -gt 0 ]; then
-		    selected_config="${selected_config} ${1#*=}"
-		else
-		    selected_config="${1#*=}"
-		fi
+		# Pseudo-Array: selected_config_$i
+		eval "selected_config_$i='${1#*=}'"
+		i=$(($i+1))
+		selected_configs=$i
 		shift
 		;;
 	    --config-postfix=*)
@@ -1047,8 +1046,16 @@ parse_params () {
     done
 
     # Set reasonable defaults
-    . $SNAPPER_CONFIG
-    selected_configs=${selected_configs:-$SNAPPER_CONFIGS}
+    if [ $selected_configs -eq 0 ]; then
+	. $SNAPPER_CONFIG
+	i=0
+	for selected_config in $SNAPPER_CONFIGS; do
+	    # Pseudo-Array: target_selected_$i (reference to $disk_uuid element)
+	    eval "selected_config_$i='$selected_config'"
+	    i=$(($i+1))
+	    selected_configs=$i
+	done
+    fi
 
     # message-text used for snapper fields
     snap_description_finished=${snap_description_finished:-"dsnap-sync backup"}
@@ -1059,15 +1066,13 @@ parse_params () {
     target_cmdline=${target_cmdline:-"none"}
     subvolid_cmdline=${subvolid_cmdline:-"none"}
     backupdir_cmdline=${backupdir_cmdline:-"none"}
-    #mediapool_name=${mediapool_name:-"none"}
-    #volume_name=${volume_name:-"none"}
 
-    if [ -z "$remote" ]; then
-	ssh=""
-    else
-	ssh="ssh -T $remote"
+    if [ -n "$remote" ]; then
+	ssh="ssh $remote"
+	scp="scp"
 	if [ ! -z "$port" ]; then
 	    ssh="$ssh -p $port"
+	    scp="$scp -P $port"
 	fi
     fi
 
@@ -1084,7 +1089,12 @@ parse_params () {
     if [ $verbose -ge 2 ]; then
 	printf "${BLUE}$progname (runtime arguments)...${NO_COLOR}\n"
 	printf "for backup-source:\n"
-	printf "  selected configs: '%s'\n" "$selected_configs"
+	#printf "  selected configs: '%s'\n" "$selected_configs"
+	i=0
+	while [ $i -lt $selected_configs ]; do
+	    printf "  selected config: '%s'\n" "$(eval echo \$selected_config_$i)"
+	    i=$(($i+1))
+	done
 	printf "for backup-target:\n"
 	printf "  disk UUID:        '%s'\n" "$uuid_cmdline"
 	printf "  disk SUBVOLID:    '%s'\n" "$subvolid_cmdline"
@@ -1143,12 +1153,13 @@ run_config_preparation () {
     # loop though selected snapper configurations
     # Pseudo Arrays $i -> store associated elements of selected_config
     i=0
-    for selected_config in $selected_configs; do
+    while [ $i -lt $selected_configs ]; do
 	# only process on existing configurations
+	selected_config=$(eval echo \$selected_config_$i)
 	verify_snapper_config $selected_config
 
 	# cleanup failed former runs
-	check_snapper_failed_ids $batch
+	check_snapper_failed_ids $selected_config $batch
 
 	if [ $SNAP_SYNC_EXCLUDE = "yes" ]; then
 	    continue
@@ -1321,7 +1332,6 @@ run_config_preparation () {
 	fi
 
 	i=$(($i+1))
-
     done
 }
 
@@ -1330,10 +1340,16 @@ run_backup () {
 	printf "${BLUE}Performing backups...${NO_COLOR}\n"
     fi
 
-    i=-1
-    for selected_config in $selected_configs; do
+    i=0
+    selected_config=
+    while [ $i -lt $selected_configs ]; do
+	# only process on existing configurations
+	selected_config=$(eval echo \$selected_config_$i)
 
-	i=$(($i+1))
+	if [ $verbose -ge 1 ]; then
+	    printf "${MAGENTA}Performing backup for config ${GREEN}'%s'${MAGENTA}...${NO_COLOR}\n" \
+		   "${selected_config}"
+	fi
 
 	SNAP_SYNC_EXCLUDE=no
 
@@ -1487,11 +1503,12 @@ run_backup () {
 		     cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
 		     	 | $cmd_pv $ssh cat >$snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
 		 else
-		     if [ $verbose -ge 3 ]; then
+		     if [ $verbose -ge 2 ]; then
 			 printf "${RED}BTRFS_Stream: %s${NO_COLOR} already saved.\n" \
 				"$snapper_target_snapshot/$snapper_target_stream"
 		     fi
-		     return 0
+		     i=$(($i+1))
+		     continue
 		 fi
 		 ;;
 	esac
@@ -1530,9 +1547,8 @@ run_backup () {
 		    printf "Common synced snapshot id: ${GREEN}'%s'${NO_COLOR}\n" \
 			   "$snapper_common_sync_id"
 	        fi
-	        # verify that source snapshot-id corresponds to a matching target snapshot-id
-	        if [ $snapper_common_sync_id -eq 0 ]; then
-	        #if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
+	        # verify that we have a matching source and target snapshot-id
+	        if [ $snapper_common_sync_id -eq 0 ] && [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
 		    if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
 			# select commen sync id
 		        get_snapper_sync_id "snapper_config=${snapper_source_config}" "remote="
@@ -1593,14 +1609,10 @@ run_backup () {
 	# send the snapper info metadata
         if [ $dryrun -eq 0 ]; then
 	    if [ -z "$remote" ]; then
-                cmd="cp $snapper_source_info $snapper_target_snapshot"
 		cp "$snapper_source_info" "$snapper_target_snapshot"
 	    else
-		if [ -n "$port" ]; then
-		    rsync -avzq -e "ssh -p $port" "$snapper_source_info" "$remote:$snapper_target_snapshot"
-		else
-		    rsync -avzq "$snapper_source_info" "$remote":"$snapper_target_snapshot"
-		fi
+		cmd="$scp $snapper_source_info root@$remote:$snapper_target_snapshot/"
+		$(eval $cmd) 1>/dev/null
 	    fi
 	else
 	    printf "dryrun: Would copy info metadata '%s' to target.\n"  \
@@ -1614,43 +1626,47 @@ run_backup () {
 	eval "snapper_target_id_$i='$snapper_source_id'"
 	eval "snapper_target_snapshot_$i='$snapper_target_snapshot'"
 
+	# finalize backup tasks
+	run_finalize ${selected_config}
+	run_cleanup ${selected_config}
+
+	i=$(($i+1))
     done
 }
 
 run_cleanup () {
-    local batch=${1:-$false}
+    local selected_config=${1}
+    local batch=${2:-$false}
 
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}Performing cleanup ...${NO_COLOR}\n"
+	printf "${MAGENTA}Performing cleanup for config ${GREEN}'%s'${MAGENTA}...${NO_COLOR}\n" \
+	       ${selected_config}
     fi
 
     if [ $dryrun -eq 0 ]; then
 	# cleanup failed runs
-	check_snapper_failed_ids "$batch"
+	check_snapper_failed_ids "$selected_config" "$batch"
 
 	# cleanup target
 	#$ssh btrfs subvolume delete $backup_root/$snapper_snapshots/$snapper_target_sync_id/snapshot
 	#$ssh rm -rf $backup_root/$snapper_snapshots/$snapper_target_sync_id
 
-	# cleanup TEMPDIR
-	if [ -d $TMPDIR_PIPE ]; then
-	    rm -rf $TMPDIR_PIPE || die "Failed to cleanup temporary directory '%s'\n" "$TMPDIR_PIPE"
-	fi
     else
-	printf "dryrun: Would cleanup TEMPDIR and failed snashot IDs ...\n"
+	printf "dryrun: Would cleanup TEMPDIR and failed snapshot IDs ...\n"
     fi
 }
 
 run_finalize () {
-    # Actual backing up
+    local selected_config=${1}
+
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}Finalize backups...${NO_COLOR}\n"
+	printf "${MAGENTA}Finalize backups for config ${GREEN}'%s'${MAGENTA}...${NO_COLOR}\n" \
+	       ${selected_config}
     fi
 
-    i=-1
-    for selected_config in $selected_configs; do
-
-	i=$(($i+1))
+    #i=-1
+    #for selected_config in $selected_configs; do
+    #	i=$(($i+1))
 
 	SNAP_SYNC_EXCLUDE=no
 
@@ -1751,7 +1767,7 @@ run_finalize () {
 			sync
 
 			# update tape attributes
-			if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
+			if [ ${#mediapool_name} -gt 1 ] && [ ${#volume_name} -gt 1 ]; then
 			    # read mounted LTFS structures
 			    tape-admin --verbose=$verbose --update-lastwrite ${mediapool_name} ${volume_name}
 			    tape-admin --verbose=$verbose --update-retensiondate ${mediapool_name} ${volume_name}
@@ -1873,7 +1889,7 @@ run_finalize () {
 	    printf "Backup complete: id=${GREEN}'%s'${NO_COLOR}, config=${GREEN}'%s'${NO_COLOR}\n" \
 		   "$snapper_source_id" "$selected_config"
 	fi
-    done
+    #done
 }
 
 select_target () {
@@ -1896,9 +1912,13 @@ select_target () {
             printf "Selecting a mounted device for backups on %s.\n" "$remote"
 	fi
     fi
-    while [ "$target_id" -eq -1 ] || [ "$target_id" -le $target_count ]; do
+    while [ "$target_id" -eq 0 ] || [ "$target_id" -le $target_count ]; do
 	if [ "$disk_subvolid_match_count" -eq 1 ]; then
 	    # matching SUBVOLID selection from commandline
+	    if [ $verbose -ge 3 ]; then
+		printf "%s mount points were found with SUBVOLID '%s'.\n" \
+		       "$disk_subvolid_match_count" "$subvolid_cmdline"
+	    fi
 	    # Pseudo-Array: target_selected_$i (reference to $disk_uuid element)
 	    eval "target_selected_$i='$disk_subvolid_match'"
 	    disk=$(eval echo \$disk_uuid_$disk_subvolid_match)
@@ -1909,31 +1929,46 @@ select_target () {
 	fi
 	if [ "$target_match_count" -eq 1 ]; then
 	    # matching TARGET selection from commandline
+	    if [ $verbose -ge 3 ]; then
+		printf "%s mount points were found with TARGET '%s'.\n" \
+		       "$target_match_count" "$target_cmdline"
+	    fi
 	    # Pseudo-Array: target_selected_$i (reference to $disk_uuid element)
 	    eval "target_selected_$i='$disk_target_match'"
-	    disk=$(eval echo \$disk_uuid_$disk_target_match)
-	    target=$(eval echo \$disk_target_$disk_target_match)
-	    fs_options=$(eval echo \$fs_options_$disk_target_match | sed -e 's/.*,\(subvolid=[0-9]*\).*,\(subvol=[0-9]*\)/\1,\2/')
+	    disk=$(eval echo \$disk_uuid_$target_match)
+	    #target=$(eval echo \$disk_target_$disk_target_match)
+	    target=$(eval echo \$target_$target_match)
+	    fs_options=$(eval echo \$fs_options_$target_match | sed -e 's/.*,\(subvolid=[0-9]*\).*,\(subvol=[0-9]*\)/\1,\2/')
 	    target_selected=$target_match
 	    break
 	fi
-	if [ "$disk_uuid_match_count" -gt 1 ]; then
-	    # got UUID selection from commandline
+	if [ "$disk_uuid_match_count" -ge 1 ]; then
+	    # matching UUID selection from commandline
 	    target_count=$disk_uuid_match_count
-	    if [ $verbose -ge 2 ]; then
-		printf "%s mount points were found with UUID '%s'.\n" "$disk_uuid_match_count" "$uuid_cmdline"
+	    if [ $verbose -ge 3 ]; then
+		printf "%s mount points were found with UUID '%s'.\n" \
+		       "$disk_uuid_match_count" "$uuid_cmdline"
 	    fi
 	    for disk_uuid in $disk_uuid_match; do
 		# Pseudo-Array: disk_selected_$i (reference to $disk_uuid element)
 		eval "target_selected_$i='$disk_uuid'"
 		disk=$(eval echo \$disk_uuid_$disk_uuid)
 		fs_options=$(eval echo \$fs_options_$disk_uuid | sed -e 's/.*,\(subvolid=[0-9]*\).*,\(subvol=[0-9]*\)/\1,\2/')
-		printf "%4s) %s (uuid=%s,%s)\n" "$i" "$target" "$disk" "$fs_options"
-		i=$((i+1))
+		if [ $disk_uuid_match -gt 1 ]; then
+		    printf "%4s) %s (uuid=%s,%s)\n" "$i" "$target" "$disk" "$fs_options"
+		    i=$((i+1))
+		else
+		    target_selected=$disk_uuid_match
+		    break
+		fi
 	    done
 	else
-	    while [ "$target_id" -le $target_count ]; do
+	    while [ "$target_id" -lt $target_count ]; do
 		# present all mounted BTRFS filesystems
+		if [ $verbose -ge 3 ]; then
+		    printf "Present selection for '%s' available targets\n" \
+		    "$target_count"
+		fi
 		# Pseudo-Array: target_selected_$i (reference to $target_id element)
 		eval "target_selected_$i='$target_id'"
 		disk=$(eval echo \$disk_uuid_$target_id)
@@ -2313,7 +2348,7 @@ traperror () {
 
 trapkill () {
     printf "Exited due to user intervention.\n"
-    run_cleanup
+    run_cleanup $selected_config
     exit 0
 }
 
@@ -2447,7 +2482,7 @@ verify_archive_structure () {
 		fi
 
 		# cleanup generated snapper entry
-		check_snapper_failed_ids $batch
+		check_snapper_failed_ids $selected_config $batch
 		die "Can't backup to existing snapshot-id ($snapper_id)!"
 	    fi
 	fi
@@ -2743,7 +2778,7 @@ verify_snapper_structure () {
 		fi
 
 		# cleanup generated snapper entry
-		check_snapper_failed_ids $batch
+		check_snapper_failed_ids $selected_config $batch
 		die "Can't backup to existing snapshot-id ($snapper_id)!"
 	    fi
 	fi
@@ -2773,8 +2808,19 @@ parse_params $@
 if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
     # read mounted LTFS structures
     tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
-    target_cmdline=$ltfs_mountpoint
-    get_tape_infos
+    if [ $? -eq 0 ]; then
+	target_cmdline=$ltfs_mountpoint
+	if  [ ${#volume_name} -eq 0 ]; then
+	    #tape-admin --verbose=$verbose --ltfs-getattribute
+	    volume_name=$(attr -g ltfs.volumeName $ltfs_mountpoint)
+	    volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
+	fi
+	get_tape_infos
+    else
+	printf "${RED}Error: ${NO_COLOR}Can't mount volume {GREEN}'%s'${NO_COLOR} from MediaPool {GREEN}'%s'${NO_COLOR}\n" \
+	       "$volume_name" "$mediapool_name"
+	die "Can't mount valid tape."
+    fi
 else
     # read mounted BTRFS structures
     get_disk_infos
@@ -2789,11 +2835,10 @@ run_config_preparation
 # run backups (Snapshot types: btrfs-snapshot, btrfs-clone, btrfs-archive)
 run_backup
 
-# finalize backup tasks
-run_finalize
-
 # cleanup
-run_cleanup
+if [ -d $TMPDIR_PIPE ]; then
+    rm -rf $TMPDIR_PIPE || die "Failed to cleanup temporary directory '%s'\n" "$TMPDIR_PIPE"
+fi
 
 printf "${BLUE}Backups done!${NO_COLOR}\n"
 exec 3>&-
