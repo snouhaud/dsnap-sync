@@ -598,11 +598,11 @@ get_tape_infos () {
 	fi
     else
 	# on remote host
-	if [ "$($ssh findmnt --noheadings --nofsroot --types fuse --output SOURCE --list | awk -F ':' '{$print \$1}')" = "ltfs" ]; then
+	if [ "$($ssh findmnt --noheadings --nofsroot --types fuse --output SOURCE --list | awk -F ':' '{print $1}')" = "ltfs" ]; then
 	    tape_ids=$($ssh findmnt --noheadings --nofsroot --types fuse --output SOURCE --list \
 			  | awk -F ':' '{print $2}')
 	    tape_targets=$($ssh findmnt --noheadings --nofsroot --types fuse --output TARGET --list \
-			   | awk -F '{print $2}')
+			   | awk '{print $1}')
 	    fs_options=$($ssh findmnt --noheadings --nofsroot --types fuse --output SOURCE,OPTIONS --list \
 			 | awk '{print $2}')
 	fi
@@ -628,7 +628,7 @@ get_tape_infos () {
     y=$(($target_count+1))
     i=$y
     for tape_id in $tape_ids; do
-	if [ "$tape_id" = "tapeid_cmdline" ]; then
+	if [ "$tape_id" = "$tapeid_cmdline" ]; then
 	    if [ ${#tape_id_match} -gt 0 ]; then
 		tape_id_match="${tape_id_match} $i"
 	    else
@@ -1500,8 +1500,13 @@ run_backup () {
 		 # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
 		 snapper_target_stream=${snapper_target_id}_${archive_type}.btrfs
 		 if [ ! -f $snapper_target_snapshot/$snapper_target_stream ]; then
-		     cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
-		     	 | $cmd_pv $ssh cat >$snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
+		     if [ -z $remote ]; then
+			 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
+		     	     | $cmd_pv cat > $snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
+		     else
+			 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
+		     	     | $cmd_pv $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>$BTRFS_PIPE"
+		     fi
 		 else
 		     if [ $verbose -ge 2 ]; then
 			 printf "${RED}BTRFS_Stream: %s${NO_COLOR} already saved.\n" \
@@ -1769,8 +1774,8 @@ run_finalize () {
 			# update tape attributes
 			if [ ${#mediapool_name} -gt 1 ] && [ ${#volume_name} -gt 1 ]; then
 			    # read mounted LTFS structures
-			    tape-admin --verbose=$verbose --update-lastwrite ${mediapool_name} ${volume_name}
-			    tape-admin --verbose=$verbose --update-retensiondate ${mediapool_name} ${volume_name}
+			    $ssh tape-admin --verbose=$verbose --update-lastwrite ${mediapool_name} ${volume_name}
+			    $ssh tape-admin --verbose=$verbose --update-retensiondate ${mediapool_name} ${volume_name}
 			fi
 		    fi
 		    return 0
@@ -2438,10 +2443,9 @@ verify_archive_structure () {
 	fi
     fi
 
-    # WIP: this is the idea right now ...
     # archive type: full or incremental
-    # full snyc:   regular btrfs send
-    # incremental: save a btrfs stream. Stream will depend on parent
+    # full snyc:   save a btrfs full-stream
+    # incremental: save a btrfs incremental-stream. Stream will depend on parent
     # restore process:
     # 1) copy in last full to btrfs filesystem
     # 2) loop though ordered incremental path: "cat <stream> | btrfs recieve"
@@ -2467,23 +2471,6 @@ verify_archive_structure () {
 		printf "${RED}Cancel path snapshot creation${NO_COLOR}: Can't create path '%s' to store target snapshot.\n" \
 		       "$backup_root/$snapper_id"
 		die "Can't create snapshot dir on target."
-	    fi
-	else
-	    cmd="$ssh stat --format %i $backup_root/$snapper_id/snapshot 2>/dev/null"
-	    ret=$(eval $cmd)
-	    if [ $? -eq 0 ]; then
-		# a former btrfs archive already exists
-		if [ -z "$remote" ]; then
-		    printf "${RED}Cancel archive creation${NO_COLOR}: Former snapshot with id ${GREEN}'%s'${NO_COLOR} already exist in ${BLUE}'%s'${NO_COLOR}\n" \
-			   "$snapper_id" "$backup_root"
-		else
-		    printf "${RED}Cancel archive creation${NO_COLOR}: Former snapshot with id ${GREEN}'%s'${NO_COLOR} already exists on ${BLUE}'%s'${NO_COLOR} in ${BLUE}'%s'${NO_COLOR}\n" \
-			   "$snapper_id" "$remote" "$backup_root/$snapper_snapshots"
-		fi
-
-		# cleanup generated snapper entry
-		check_snapper_failed_ids $selected_config $batch
-		die "Can't backup to existing snapshot-id ($snapper_id)!"
 	    fi
 	fi
     else
@@ -2807,17 +2794,17 @@ parse_params $@
 # select the target LTFS tape
 if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
     # read mounted LTFS structures
-    tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
+    $ssh tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
     if [ $? -eq 0 ]; then
 	target_cmdline=$ltfs_mountpoint
 	if  [ ${#volume_name} -eq 0 ]; then
 	    #tape-admin --verbose=$verbose --ltfs-getattribute
-	    volume_name=$(attr -g ltfs.volumeName $ltfs_mountpoint)
+	    volume_name=$($ssh attr -g ltfs.volumeName $ltfs_mountpoint)
 	    volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
 	fi
 	get_tape_infos
     else
-	printf "${RED}Error: ${NO_COLOR}Can't mount volume {GREEN}'%s'${NO_COLOR} from MediaPool {GREEN}'%s'${NO_COLOR}\n" \
+	printf "${RED}Error: ${NO_COLOR}Can't mount volume ${GREEN}'%s'${NO_COLOR} from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
 	       "$volume_name" "$mediapool_name"
 	die "Can't mount valid tape."
     fi
