@@ -1577,15 +1577,20 @@ run_backup () {
 			   "$snapper_common_sync_id"
 	        fi
 	        # verify that we have a matching source and target snapshot-id
-	        if [ $snapper_common_sync_id -eq 0 ] && [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
-		    if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
-			# select commen sync id
-		        get_snapper_sync_id "snapper_config=${snapper_source_config}" "remote="
-		        if [ $? -eq 0 ]; then
-			    snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
-		        else
-			    printf "no commen sync id.\n"
-		        fi
+	        if [ $snapper_common_sync_id -eq 0 ]; then
+		    if [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
+			if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
+			    # select commen sync id
+		            get_snapper_sync_id "snapper_config=${snapper_source_config}" "remote="
+		            if [ $? -eq 0 ]; then
+				snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
+		            else
+				printf "no commen sync id.\n"
+		            fi
+			fi
+		    else
+			snapper_common_sync_id=$snapper_source_id
+			snapper_common_sync_snapshot=$snapper_source_sync_snapshot
 		    fi
 		fi
 
