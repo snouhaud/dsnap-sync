@@ -203,7 +203,7 @@ create_snapshot () {
 	    printf "${MAGENTA}Snapper source snapshot ${GREEN}'%s'${MAGENTA} created${NO_COLOR}\n" "$snapper_source_id"
 	fi
     else
-	printf "dryrun: Would create source snapshot with snapper config '%s' ...\n" "$selected_config"
+	printf "${MAGENTA}dryrun${NO_COLOR}: Would create source snapshot with snapper config '%s' ...\n" "$selected_config"
 	snapper_source_sync_id="<snapper_source_id>"
     fi
 }
@@ -1438,54 +1438,60 @@ run_backup () {
 		;;
 	esac
 
-	if [ "$interactive" -eq 1  ]; then
-	    if [ $verbose -ge 2 ]; then
-		printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
-		       "$snapper_source_id" "$snapper_source_snapshot"
+	if [ $dryrun -eq 0 ]; then
+	    if [ "$interactive" -eq 1  ]; then
+		if [ $verbose -ge 2 ]; then
+		    printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
+			   "$snapper_source_id" "$snapper_source_snapshot"
+		fi
+
+		if [ $btrfs_quota -eq 1 ]; then
+		    # qgroup for given path, exclude ancestrals
+		    # qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
+		    snapper_source_snapshot_size=$(btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
+						       | awk 'FNR>2 {print $2}')
+		    if [ $verbose -ge 3 ]; then
+			printf "${MAGENTA}BTRFS qgroup show result: ${GREEN}'%s'\b${NO_COLOR}'%s'\n" \
+	    		       "$?" "$snapper_source_snapshot_size"
+		    fi
+		    #if [ $? -eq 1 ]; then
+		    # subvolume is not configured for quota, (temporary?) enable that
+		    #btrfs_quota_tmp=1
+		    #btrfs quota enable $snapper_source_snapshot 2>/dev/null
+		    #btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
+		    #fi
+
+		    # need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
+		    #if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
+		    if [ $snapper_source_snapshot_size -ge 1048576 ]; then
+			snapper_source_snapshot_size=$(btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
+							   | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
+		    fi
+		    if [ $verbose -ge 2 ]; then
+			printf "${MAGENTA}BTRFS quota size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
+			       "$snapper_source_id" "$snapper_source_snapshot_size"
+		    fi
+
+		    # should we disable quota usage again?
+		    #if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
+		else
+		    snapper_source_snapshot_size=$(du --one-file-system --summarize $snapper_source_snapshot 2>/dev/null \
+						       | awk -F ' ' '{print $1}')
+		    if [ $snapper_source_snapshot_size -ge 1048576 ]; then
+			snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
+		    fi
+		    if [ $verbose -ge 2 ]; then
+			printf "${MAGENTA}BTRFS subvolume size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
+			       "$snapper_source_id" "$snapper_source_snapshot_size"
+		    fi
+		fi
 	    fi
-
-	    if [ $btrfs_quota -eq 1 ]; then
-		# qgroup for given path, exclude ancestrals
-		# qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
-		snapper_source_snapshot_size=$(btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
-					       | awk 'FNR>2 {print $2}')
-		if [ $verbose -ge 3 ]; then
-	            printf "${MAGENTA}BTRFS qgroup show result: ${GREEN}'%s'\b${NO_COLOR}'%s'\n" \
-	    		   "$?" "$snapper_source_snapshot_size"
-		fi
-		#if [ $? -eq 1 ]; then
-		# subvolume is not configured for quota, (temporary?) enable that
-		#btrfs_quota_tmp=1
-		#btrfs quota enable $snapper_source_snapshot 2>/dev/null
-		#btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
-		#fi
-
-		# need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
-		#if [ $snapper_source_snapshot_size -ge 1073741824 ]; then
-		if [ $snapper_source_snapshot_size -ge 1048576 ]; then
-	            snapper_source_snapshot_size=$(btrfs qgroup show -f --gbytes $snapper_source_snapshot 2>/dev/null \
-						       | awk 'FNR>2 { gsub(/.[0-9][0-9]GiB/,"G"); print $2}')
-		fi
-		if [ $verbose -ge 2 ]; then
-	            printf "${MAGENTA}BTRFS quota size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
-			   "$snapper_source_id" "$snapper_source_snapshot_size"
-		fi
-
-		# should we disable quota usage again?
-		#if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
-	    else
-		snapper_source_snapshot_size=$(du --sum $snapper_source_snapshot 2>/dev/null \
-						   | awk -F ' ' '{print $1}')
-		if [ $snapper_source_snapshot_size -ge 1048576 ]; then
-		    snapper_source_snapshot_size=$(($snapper_source_snapshot_size / 1024 / 1024))G
-		fi
-		if [ $verbose -ge 2 ]; then
-	            printf "${MAGENTA}BTRFS subvolume size for ${GREEN}source snapshot${MAGENTA}: id=${GREEN}'%s'${MAGENTA}, size=${GREEN}'%s'${NO_COLOR} ...\n" \
-			   "$snapper_source_id" "$snapper_source_snapshot_size"
-		fi
+	else
+	    if [ $verbose -ge 2 ]; then
+		printf "${MAGENTA}dryrun: Would calculate BTRFS subvolume size for ${GREEN}source snapshot${NO_COLOR} ...\n" \
+		       "$snapper_source_id"
 	    fi
 	fi
-
 	# setting process I/O scheduling options
 	if [ $do_ionice_cmd -eq 1 ]; then
 	    # class: best-efford, priority: medium
@@ -1624,7 +1630,7 @@ run_backup () {
 	        fi
 	    fi
 	else
-	    printf "dryrun: Would run btrfs send / btrfs receive pipe\n"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: Would run btrfs send / btrfs receive pipe\n"
 	    #printf "dryrun: '%s'\n" "$cmd"
 	fi
 
@@ -1637,7 +1643,7 @@ run_backup () {
 		$(eval $cmd) 1>/dev/null
 	    fi
 	else
-	    printf "dryrun: Would copy info metadata '%s' to target.\n"  \
+	    printf "${MAGENTA}dryrun${NO_COLOR}: Would copy info metadata '%s' to target.\n"  \
 		   "$snapper_source_info"
 	fi
 
@@ -1674,7 +1680,7 @@ run_cleanup () {
 	#$ssh rm -rf $backup_root/$snapper_snapshots/$snapper_target_sync_id
 
     else
-	printf "dryrun: Would cleanup TEMPDIR and failed snapshot IDs ...\n"
+	printf "${MAGENTA}dryrun${NO_COLOR}: Would cleanup TEMPDIR and failed snapshot IDs ...\n"
     fi
 }
 
@@ -1900,11 +1906,11 @@ run_finalize () {
 	else
 	    # dry-run output
 	    cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata --cleanup-algorithm $snap_cleanup_algorithm $snapper_sync_id"
-	    printf "dryrun: %s\n" "$cmd"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
 	    cmd="snapper --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_sync_id"
-	    printf "dryrun: %s\n" "$cmd"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
 	    cmd="snapper --config $selected_config modify --description $snap_description_finished $snapper_source_sync_id"
-	    printf "dryrun: %s\n" "$cmd"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
 	fi
 
 	if [ $verbose -ge 1 ]; then
@@ -2452,10 +2458,10 @@ verify_archive_structure () {
 	    fi
 	else
 	    if [ -z $remote_host ]; then
-		printf "dryrun: Would create backup-path %s ...\n" \
+		printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s ...\n" \
 		       "$base_path"
 	    else
-		printf "dryrun: Would create backup-path %s on remote host %s ...\n" \
+		printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s on remote host %s ...\n" \
 		       "$remote_host" "$base_path"
 	    fi
 	fi
@@ -2492,7 +2498,7 @@ verify_archive_structure () {
 	    fi
 	fi
     else
-	printf "dryrun: Would check/create path %s to store target snapshot ...\n" \
+	printf "${MAGENTA}dryrun${NO_COLOR}: Would check/create path %s to store target snapshot ...\n" \
 	       "$backup_root/$snapper_snapshots/$snapper_id"
     fi
 }
@@ -2606,10 +2612,10 @@ verify_snapper_structure () {
 		fi
 	    else
 		if [ -z $remote_host ]; then
-		    printf "dryrun: Would create backup-path %s ...\n" \
+		    printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s ...\n" \
 			   "$base_path"
 		else
-		    printf "dryrun: Would create backup-path %s on remote host %s ...\n" \
+		    printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s on remote host %s ...\n" \
 			   "$remote_host" "$base_path"
 		fi
 	    fi
@@ -2658,8 +2664,8 @@ verify_snapper_structure () {
 	    #   $($cmd) || \
 		#	die "Changing the directory mode for '$backup_root' on '$remote_host'."
 	else
-	    printf "dryrun: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
-	    printf "dryrun: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_snapshot"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_snapshot"
 	fi
     else
 	if [ $ret -ne 256 ]; then
@@ -2743,7 +2749,7 @@ verify_snapper_structure () {
 	    fi
 	fi
     else
-	printf "dryrun: Would check/create for valid snapper config %s  ...\n" \
+	printf "${MAGENTA}dryrun${NO_COLOR}: Would check/create for valid snapper config %s  ...\n" \
 	       "$snapper_config"
     fi
 
@@ -2788,7 +2794,7 @@ verify_snapper_structure () {
 	    fi
 	fi
     else
-	printf "dryrun: Would check/create path %s to store target snapshot ...\n" \
+	printf "${MAGENTA}dryrun${NO_COLOR}: Would check/create path %s to store target snapshot ...\n" \
 	       "$backup_root/$snapper_snapshots/$snapper_id"
     fi
 }
