@@ -542,6 +542,7 @@ get_disk_infos () {
 
     # initialize our structures
     i=0
+    eval "fs_type_$i='btrfs'"
     for disk_uuid in $disk_uuids; do
 	if [ "$disk_uuid" = "$uuid_cmdline" ]; then
 	    if [ ${#disk_uuid_match} -gt 0 ]; then
