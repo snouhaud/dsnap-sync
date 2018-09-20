@@ -27,7 +27,7 @@
 # difference for the next incremental snapshot.
 
 progname="${0##*/}"
-version="0.5.9.4"
+version="0.5.9.5"
 
 # The following lines are modified by the Makefile or
 # find_snapper_config script
@@ -109,6 +109,7 @@ check_prerequisites () {
 
     # optional binaries:
     which attr >/dev/null 2>&1 || { printf "'attr' is not installed." && exit 1; }
+    which ionice >/dev/null 2>&1 && { do_ionice_cmd=1; }
     which notify-send >/dev/null 2>&1 && { donotify=1; }
     which pv >/dev/null 2>&1 && { do_pv_cmd=1; }
     which tape-admin >/dev/null 2>&1 && { tape_admin_cmd=1; }
@@ -893,6 +894,10 @@ parse_params () {
 		do_pv_cmd=0
 		shift 1
 		;;
+	    --noionice)
+		do_ionice_cmd=0
+		shift 1
+		;;
 	    -p|--port)
 		port=$2
 		shift 2
@@ -1481,10 +1486,20 @@ run_backup () {
 	    fi
 	fi
 
+	# setting process I/O scheduling options
+	if [ $do_ionice_cmd -eq 1 ]; then
+	    # class: best-efford, priority: medium
+	    #cmd_ionice="ionice --class 2 --classlevel 5"
+	    # class: idle
+	    cmd_ionice="ionice --class 3"
+	else
+	    cmd_ionice=''
+	fi
+
 	# settings for interactive progress status
 	if [ $do_pv_cmd -eq 1 ]; then
 	    pv_options="--delay-start 2  --interval 5 --format \"time elapsed [%t] | avg rate %a | rate %r | transmitted [%b] | %p | time remaining [%e]\" "
-	    cmd_pv="pv --size $snapper_source_snapshot_size $pv_options |"
+	    cmd_pv="pv --size $snapper_source_snapshot_size $pv_options | "
 	    #cmd_pv="pv $pv_options --size ${snapper_source_snapshot_size} | dialog --gauge \"$progname: Progress for config '$selected_config'\" 6 85 |"
 	else
 	    cmd_pv=''
@@ -1494,7 +1509,7 @@ run_backup () {
 	     btrfs)
 		 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
 		     | $cmd_pv \
-		     $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+		     $cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
 		 ;;
 	     *)
 		 # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
@@ -1502,10 +1517,12 @@ run_backup () {
 		 if [ ! -f $snapper_target_snapshot/$snapper_target_stream ]; then
 		     if [ -z $remote ]; then
 			 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
-		     	     | $cmd_pv cat > $snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
+		     	     | $cmd_pv \
+			     $cmd_ionice cat > $snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
 		     else
 			 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
-		     	     | $cmd_pv $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>$BTRFS_PIPE"
+		     	     | $cmd_pv \
+			     $cmd_ionice $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>$BTRFS_PIPE"
 		     fi
 		 else
 		     if [ $verbose -ge 2 ]; then
@@ -1575,16 +1592,16 @@ run_backup () {
 			    # subvolume on the source and the receiving location (the parent-id).
 			    # using "btrfs send -p" instead of "btrfs send -c", then no parent search would be
 			    # needed (Andreij explained in: https://www.spinics.net/lists/linux-btrfs/msg69369.html)
-			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_source_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 			    	| $cmd_pv \
-				$ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+				$cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
 			    ;;
 			*)
 			    # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
 			    snapper_target_stream=${snapper_target_id}_incremental.btrfs
 			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 			        | $cmd_pv \
-				$ssh cat >$snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
+				$cmd_ionice $ssh cat >$snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
 			    ;;
 		    esac
 		    if [ $verbose -ge 3 ]; then
@@ -2381,6 +2398,7 @@ Options:
  -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
      --nonotify              Disable graphical notification (via dbus)
      --nopv                  Disable graphical progress output (disable pv)
+     --noionice              Disable setting of I/O class and priority options
  -p, --port <port>           The remote port.
  -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
                              You should specify the remote machine's hostname or ip address. The 'root' user
