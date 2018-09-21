@@ -316,6 +316,30 @@ get_backupdir () {
     fi
 }
 
+get_media_infos () {
+    # select the target LTFS tape
+    if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
+	# read mounted LTFS structures
+	$ssh tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
+	if [ $? -eq 0 ]; then
+	    target_cmdline=$ltfs_mountpoint
+	    if  [ ${#volume_name} -eq 0 ]; then
+		#tape-admin --verbose=$verbose --ltfs-getattribute
+		volume_name=$($ssh attr -g ltfs.volumeName $ltfs_mountpoint)
+		volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
+	    fi
+	    get_tape_infos
+	else
+	    printf "${RED}Error: ${NO_COLOR}Can't mount volume ${GREEN}'%s'${NO_COLOR} from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name"
+	    die "Can't mount valid tape."
+	fi
+    else
+	# read mounted BTRFS structures
+	get_disk_infos
+    fi
+}
+
 get_snapper_backup_type () {
     local snapper_config=$1
     local snapper_config_tpye='none'
@@ -2821,27 +2845,8 @@ check_prerequisites
 # validate commandline options, set resonable defaults
 parse_params $@
 
-# select the target LTFS tape
-if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
-    # read mounted LTFS structures
-    $ssh tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
-    if [ $? -eq 0 ]; then
-	target_cmdline=$ltfs_mountpoint
-	if  [ ${#volume_name} -eq 0 ]; then
-	    #tape-admin --verbose=$verbose --ltfs-getattribute
-	    volume_name=$($ssh attr -g ltfs.volumeName $ltfs_mountpoint)
-	    volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
-	fi
-	get_tape_infos
-    else
-	printf "${RED}Error: ${NO_COLOR}Can't mount volume ${GREEN}'%s'${NO_COLOR} from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
-	       "$volume_name" "$mediapool_name"
-	die "Can't mount valid tape."
-    fi
-else
-    # read mounted BTRFS structures
-    get_disk_infos
-fi
+# parse infos for backup medium
+get_media_infos
 
 # select the backup target
 select_target
