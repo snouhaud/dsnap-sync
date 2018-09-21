@@ -202,7 +202,7 @@ Software Paket Manager.
       -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
 	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
       -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt
-                                  If multiple mount points are found with the same UUID, will prompt for user selection 
+                                  If multiple mount points are found with the same UUID, will prompt for user selection
       -t, --target <target>       Specify the mountpoint of the backup device
           --volumename            Specify the name of the tape volume
       -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
@@ -264,13 +264,13 @@ sorgen. Folgende Sicherungstypen werden unterschieden:
   * ein Unterverzeichnis des Konfigurations-Namens (`archive-<config-name>`)
   * ein Unterverzeichnis der Snapshot-ID (`<snapper-id>`)
   * der aktuelle btrfs Stream wird im Unterverzeichnis abgelegt
-    (`<snapper-id>_[full | incremental].btrfs`) 
+    (`<snapper-id>_[full | incremental].btrfs`)
   * die Metadaten des Prozesses werden in der Datei `info.xml` abgelegt
 
   Steht `ltfs` zur Verfügung, ist ein Backup auf Bänder möglich.
   Hierbei wird ein Band durch ltfs vorbereitet und kann anschließend in
   das Dateisystem unter einem definierten Pfad eingebunden werden
-  ('mount-point'). Eine `dsnap-sync` Sicherung auf diesen Pfad erfolgt 
+  ('mount-point'). Eine `dsnap-sync` Sicherung auf diesen Pfad erfolgt
   über den Sicherungstyp `btrfs-archive`.
 
 ## Automounter
@@ -295,35 +295,35 @@ des Beispiel Dokuments enthält weitere Details.
 
 ## Tape-Administration / LTFS
 
-Wenn sie `dsnap-sync` für die Archivierung von Snapshots auf Bänder 
+Wenn sie `dsnap-sync` für die Archivierung von Snapshots auf Bänder
 verwenden, sollten den Einsatz in Kombination mit LTFS überdenken.
 (WIP - work in progress: Die erster erfolgreicher Versuch wurde mit
 LTO7-Bändern in einem Quantum SuperLoader3 getestet).
 
 Das Installations-Paket beinhaltet ein Hilfs-Skript `tape-admin`, das
 alle Basisaufgaben für die Administration von Bändern als Funktionen
-bereitstellt. Hardware, die einen mechanischen Bandwechsel ermöglicht 
+bereitstellt. Hardware, die einen mechanischen Bandwechsel ermöglicht
 (z.B Quantum SuperLoader3), kann das Hilfs-Skript über das Paket `mtx`
 steuern. Dies beinhaltet das Auslesen von Barcodes als auch das Laden
 und Entladen von Bändern in wählbare Quell- und Ziel-Schächte (Slots).
 
 (WIP: Die Zuordnung von Band-Namen zu Pools und Slots neben deren
 Media-Zugriffsrichtlienen wird in einer JSON-Datei beschrieben.
-Diese muss derzeit noch manuell gepflegt werden: 
+Diese muss derzeit noch manuell gepflegt werden:
 `/etc/dsnap-sync/MediaPools.json`).
 
 Werden Barcode-Labels selbst erstellt, prüfen Sie bitte Hinweise auf das
-zu verwendende Format. Üblicherweise unterstützen die Barcode-Leser 
+zu verwendende Format. Üblicherweise unterstützen die Barcode-Leser
 "Code 39" Etiketten.
 
-`LTFS` ist ein Ansatz, der Lese- und Schreib-Operationen auf Bänder in 
-der für Festplatten üblichen Funktionsweise implementiert. Ab Geräten 
+`LTFS` ist ein Ansatz, der Lese- und Schreib-Operationen auf Bänder in
+der für Festplatten üblichen Funktionsweise implementiert. Ab Geräten
 der LTO5 Generation sind Sie in der Lage, Bänder für die LTFS-Nutzung
 vorzubareiten (formatieren, bzw. partitionieren).
 Anschließend können erfolgreich formatierte Bänder in das Dateisystem
 eingehängt werden (FUSE). Das Beschreiben und Auslesen der Daten erfolgt
 dann mit den gewohnten Betriebssystem Tools. Eine Open-Source Implementierung
-finden Sie z.B. unter 
+finden Sie z.B. unter
 [LinearTapeFileSystem](https://github.com/LinearTapeFileSystem/ltfs).
 
 ## Mitarbeit
@@ -335,15 +335,15 @@ Vielleicht findet Ihr dort auch Anregungen.
 
 ## Ähnliche Projekte
 
-`dsnap-sync` basiert auf dem ursprünglichen Code von Wes Barnetts. Als 
-open-source war meine Intention, die Erweiterungen in das Projekt 
+`dsnap-sync` basiert auf dem ursprünglichen Code von Wes Barnetts. Als
+open-source war meine Intention, die Erweiterungen in das Projekt
 zurückfliessen zu lassen. Neben der Tatsache, dass diese Version bashisms
-eleminiert hat, sieht Wes sich leider zeitlich ausser Stande, den neuen 
-Code in angemessener Art und Weise zu prüfen um ihn anschließende in 
+eleminiert hat, sieht Wes sich leider zeitlich ausser Stande, den neuen
+Code in angemessener Art und Weise zu prüfen um ihn anschließende in
 `snap-sync` einzubinden. Jeder ist willkommen dies zu tun.
 
-Bis dahin habe ich mich entschlossen, die Ergebnisse als Fork unter dem 
-Namen `dsnap-sync` zu veröffentlichen. Die Namensämderung soll mögliche 
+Bis dahin habe ich mich entschlossen, die Ergebnisse als Fork unter dem
+Namen `dsnap-sync` zu veröffentlichen. Die Namensämderung soll mögliche
 Verwechslungen vermeinden.
 
 ## Lizenz

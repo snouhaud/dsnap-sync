@@ -17,7 +17,7 @@ and combines it with managemnet functionality of `snapper`.
 
 `dsnap-sync` creates backups as btrfs-snapshots on a selectable target device.
 Plug in and mount any btrfs-formatted device to your system. Supported targets
-may be either local attached USB drives, automountable RAID devices or LTFS 
+may be either local attached USB drives, automountable RAID devices or LTFS
 aware tapes. All supported targets can be located on a remote host.
 If possible the backup process will send incremental snapshots to the target
 drive. If the snapshot will be stored on a remote host, the transport will be
@@ -32,11 +32,11 @@ will offer details as a reference point.
 ## Backup process
 
 The default `dsnap-sync` backup process will iterate through all defined `snapper`
-configurations that are found on your source system. 
+configurations that are found on your source system.
 
 If you prefer to have single processes for each configuration or configuration
-groups, you are free to define isolated systemd-units. They will be triggerd 
-interactively or via timer units. `dsnap-sync` will cycle through each 
+groups, you are free to define isolated systemd-units. They will be triggerd
+interactively or via timer units. `dsnap-sync` will cycle through each
 referenced `snapper` configuration (option `-c` or `--config`).
 
 For each selected `snapper` configuration `dsnap-sync`
@@ -202,7 +202,7 @@ Please use your host software package manager.
       -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
 	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
       -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt
-                                  If multiple mount points are found with the same UUID, will prompt for user selection 
+                                  If multiple mount points are found with the same UUID, will prompt for user selection
       -t, --target <target>       Specify the mountpoint of the backup device
           --volumename            Specify the name of the tape volume
       -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
@@ -244,7 +244,7 @@ backup types are differenciated:
   It is useful, if a selected `snapper` configuration from the source
   host will be synced to a target external disk (disk-2-disk-2-disk).
   The clone configuration will be managable via `snapper` as expected.
-  Please be aware, that the target device must be a btrfs filesystem 
+  Please be aware, that the target device must be a btrfs filesystem
   that can save the snapshots.
 
 * btrfs-archive
@@ -259,7 +259,7 @@ backup types are differenciated:
   * create a config specific subdirectory (`archive-<config-name>`)
   * create a snapshot-id subdirectory (`<snapper-id>`)
   * create the btrfs stream file inside the subdirectory
-      (`<snapper-id>_[full | incremental].btrfs`) 
+      (`<snapper-id>_[full | incremental].btrfs`)
   * the proccess metadata are saved to a file called `info.xml`
 
   If you enabled the `ltfs` package, support for backups to tape is possible.
@@ -306,7 +306,7 @@ An open-source implementation can be found at
 
 ## Contributing
 
-Help is very welcome! Feel free to fork and issue a pull request to add 
+Help is very welcome! Feel free to fork and issue a pull request to add
 features or tackle open issues. If you are requesting new features, please
 have a look at the TODO list. It might be already on the agenda.
 
