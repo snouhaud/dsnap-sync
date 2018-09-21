@@ -324,7 +324,7 @@ get_media_infos () {
 	if [ $? -eq 0 ]; then
 	    target_cmdline=$ltfs_mountpoint
 	    if  [ ${#volume_name} -eq 0 ]; then
-		#tape-admin --verbose=$verbose --ltfs-getattribute
+		# parse out volume-name (fuse - extended attribute)
 		volume_name=$($ssh attr -g ltfs.volumeName $ltfs_mountpoint)
 		volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
 	    fi
@@ -2628,25 +2628,27 @@ verify_snapper_structure () {
 		fi
 	    fi
 	    # strip last dir from backup_root
-	    base_path=${backup_root%/*}; echo $base_path
-	    if [ $dryrun -eq 0 ]; then
-		$($ssh mkdir --mode=0700 --parents $base_path)
-		if [ $verbose -ge 3 ]; then
-		    if [ -z $remote_host ]; then
-			printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR}...\n" \
-			       "$backup_root"
-		    else
-			printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR} on ${MAGENTA}remote host ${GREEN}'%s'${NO_COLOR=} ...\n" \
-			       "$backup_root" "$remote_host"
+	    base_path=${backup_root%/*}
+	    if [ ${#base_path} -ge 1 }; then
+		if [ $dryrun -eq 0 ]; then
+		    $($ssh mkdir --mode=0700 --parents $base_path)
+		    if [ $verbose -ge 3 ]; then
+			if [ -z $remote_host ]; then
+			    printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR}...\n" \
+				   "$backup_root"
+			else
+			    printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR} on ${MAGENTA}remote host ${GREEN}'%s'${NO_COLOR=} ...\n" \
+				   "$backup_root" "$remote_host"
+			fi
 		    fi
-		fi
-	    else
-		if [ -z $remote_host ]; then
-		    printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s ...\n" \
-			   "$base_path"
 		else
-		    printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s on remote host %s ...\n" \
-			   "$remote_host" "$base_path"
+		    if [ -z $remote_host ]; then
+			printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s ...\n" \
+			       "$base_path"
+		    else
+			printf "${MAGENTA}dryrun${NO_COLOR}: Would create backup-path %s on remote host %s ...\n" \
+			       "$remote_host" "$base_path"
+		    fi
 		fi
 	    fi
 	fi
