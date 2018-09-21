@@ -342,7 +342,7 @@ get_media_infos () {
 
 get_snapper_backup_type () {
     local snapper_config=$1
-    local snapper_config_tpye='none'
+    local snapper_config_type='none'
     local key
     local value
 
@@ -2416,35 +2416,35 @@ $progname $version
 Usage: $progname [options]
 
 Options:
- -a, --automount <path>      start automount for given path to get a valid target mountpoint.
+ -a, --automount <path>      start automount for given path to get a valid target mountpoint
  -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
-     --batch                 directory name on first backup"
+     --backuptype <type>     Specify backup type <clone | archive>
+     --batch                 no user interaction
  -d, --description <desc>    Change the snapper description. Default: "latest incremental backup"
      --label-finished <desc> snapper description tagging successful jobs. Default: "dsnap-sync backup"
      --label-running <desc>  snapper description tagging active jobs. Default: "dsnap-sync in progress"
-     --label-synced <desc>   snapper description tagging last synced jobs.
+     --label-synced <desc>   snapper description tagging last synced jobs
                              Default: "dsnap-sync last incremental"
      --color                 Enable colored output messages
-     --dry-run               perform a trial run where no changes are made.
  -c, --config <config>       Specify the snapper configuration to use. Otherwise will perform for each snapper
-                             configuration. Can list multiple configurations within quotes, space-separated
-                             (e.g. -c "root home").
-     --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name.
+                             configuration. You can select multiple configurations
+                             (e.g. -c "root" -c "home"; --config root --config home)
+     --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name
+     --dry-run               perform a trial run (no changes are written)
      --mediapool             Specify the name of the tape MediaPool
  -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
      --nonotify              Disable graphical notification (via dbus)
      --nopv                  Disable graphical progress output (disable pv)
-     --noionice              Disable setting of I/O class and priority options
- -p, --port <port>           The remote port.
- -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
+     --noionice              Disable setting of I/O class and priority options on target
+ -p, --port <port>           The remote port
+ -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh
                              You should specify the remote machine's hostname or ip address. The 'root' user
-                             must be permitted to login on the remote machine.
- -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
+                             must be permitted to login on the remote machine
+ -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5
      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
- -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt."
-                             If multiple mount points are found with the same UUID, will prompt user."
- -t, --target <target>       Specify the mountpoint of the backups device.
-     --type <backuptyp>      Specify backup type <clone | archive>
+ -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt
+                             If multiple mount points are found with the same UUID, will prompt user selection
+ -t, --target <target>       Specify the mountpoint of the backup device
      --volumename            Specify the name of the tape volume
  -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
      --version		     show program version
