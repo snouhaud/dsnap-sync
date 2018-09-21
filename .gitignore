@@ -1,8 +1,0 @@
-*~
-*.bak
-AUR/*
-PKGBUILD
-pkg/*
-*.tar*
-*.gz
-*.xz
