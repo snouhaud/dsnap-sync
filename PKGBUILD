@@ -1,15 +1,16 @@
 # Maintainer: Ralf Zerres <ralf.zerres.de at gmail dot com>
 pkgname=dsnap-sync
-pkgver=0.5.2
+pkgver=0.6.0
 pkgrel=1
 pkgdesc="Use snapper snapshots to backup to external drive"
 arch=(any)
 url="https://github.com/rzerres/dsnap-sync"
 license=('GPL')
-depends=(snapper dash)
+depends=('btrfs-progs' 'gawk' 'dash' 'openssh' 'sed' 'snapper' 'systemd')
+optdepends=('attr' 'ionice' 'jq: for "MediaPool" functionality' 'libnotify' 'ltfs' 'mtx' 'perl' 'pv' 'util-linux')
 source=(${url}/releases/download/$pkgver/$pkgname-$pkgver.tar.gz{,.sig})
 #validpgpkeys=('8535CEF3F3C38EE69555BF67E4B5E45AA3B8C5C3')
-sha512sums=('bc7dc618874f2acc6e15f80960fa45c5703b0da709e3872febe1579d6965907074aca4704dbcc2545261392c1bff977a2b81d2a15e6850fefa3cd7c231f0290c'
+sha512sums=('SKIP')
             'SKIP')
 
 package() {
