@@ -11,10 +11,11 @@ Funktionalität und kombiniert diese mit den Management-Funktionen von
 `snapper`.
 
 `dsnap-sync` erstellt die Sicherungen als btrfs-Snapshots auf einem Ziel-Gerät.
-Hierzu muss das Gerät zunächst mit btrfs formatiert werden. Anschließend wird
-es im Betriebssystem bereitgestellt. Das unterstützte Ziel-Medium ist entweder
-eine USB Festplatte, oder auch ein automatisch eingelinktes RAID System auf
-einem entfernten Host.
+Hierzu muss das Gerät zunächst formatiert und anschließend im Betriebssystem
+bereitgestellt werden. Das unterstützte Ziel-Medium ist entweder
+eine USB Festplatte, ein automatisch eingelinktes RAID System, oder ein LTFS
+formatiertes Band. Alle unterstützten Ziel-Geräte können sich auch auf einem
+einem entfernten Host befinden.
 Wenn möglich wird der Sicherungs-Prozess nur die inkrementellen Veränderungen
 im Snapshot auf das Ziel-Gerät übertragen. Bei Sicherungen auf einem entfernten
 Host wird die Übertragung mittels ssh gesichert.
@@ -28,21 +29,24 @@ verweisen.
 
 ## Sicherungs-Prozess
 
-Für einen Sicherungs-Prozess `dsnap-sync` wird in der Standardkonfiguration
+Für einen Sicherungs-Prozess wird `dsnap-sync` in der Standardkonfiguration
 alle definierten `snapper` Konfigurationen des Quell-Systems einbeziehen.
-Wenn Sie individuelle Sicherungs-Prozesse je `snapper` Konfiguration
-preferieren, können sie eigenständige systemd-units definieren, oder
-`dsnap-sync` interaktiv aufrufen und nur auf die gewünschte snapper
-Konfiguration referenzieren (Option: `-c` oder `--config`).
+Wenn Sie es vorziehen, individuelle Sicherungs-Prozesse je `snapper` Konfiguration
+oder Konfigurations-Gruppen einzurichten, sollten sie eigenständige systemd units
+definieren. Diese können anschließend interaktiv oder über timer units
+aufgerufen werden.
+`dsnap-sync` wird alle refenzierten `snapper` Konfigurationen im Sicherungslauf
+berücksichtigen (Option: `-c` oder `--config`).
 
 Für jede ausgewählte `snapper` Konfiguration wird `dsnap-sync`
 
 * die Ziel-Geräte Informationen anzeigen/auswählen
+* die snapper Strukturen vorbereiten
 * die eigentliche Sicherung ausführen
   (Verarbeitung für backupdir, snapper Strukturen, btrfs send / btrfs recieve)
 * abschließende Sicherungs-Arbeiten ausführen
   (Aktualisierung der snapper Metadata für jeden Quell- und Ziel-Snapshot)
-* abschließende Aufräumarbeiten
+* abschließende Aufräumarbeiten durchführen
 
 Üblicherweise beschreiben artverwandte Tools diesen Prozess als
 Disk to Disk (d2d) Sicherung. Wenn möglich wird `dsnap-sync` die
@@ -64,6 +68,7 @@ müssen sie entweder
 
 * ein Paar aus btrfs UUID und SUBVOLID
 * ein Target (hier: 'mount point')
+* ein MediaPool / Band-Name
 
 auswählen. Damit ist `dsnap-sync` in der Lage Sicherungsprozesse zu
 unterscheiden, die als Quelle den gleichen Snapshot haben, jedoch
@@ -103,7 +108,7 @@ Folgende Tools werden verwendet:
 - findmnt
 - sed
 - snapper
-- ssh
+- ssh / scp
 
 Optional können interaktive Rückmeldungen mit foldenen Tools ergänzt
 werden:
@@ -122,6 +127,7 @@ Folgende Tools werden verwendet:
 - ltfs
 - mkltfs
 - mtx
+- perl
 - sed
 
 ## Installation
@@ -171,7 +177,8 @@ Software Paket Manager.
       Options:
       -a, --automount <path>      start automount for given path to get a valid target mountpoint.
       -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
-	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
+          --backuptype <type>     Specify backup type <archive | child | parent>
+	      --batch                 no user interaction
       -d, --description <desc>    Change the snapper description. Default: "latest incremental backup"
           --label-finished <desc> snapper description tagging successful jobs. Default: "dsnap-sync backup"
           --label-running <desc>  snapper description tagging active jobs. Default: "dsnap-sync in progress"
@@ -179,25 +186,25 @@ Software Paket Manager.
                                   Default: "dsnap-sync last incremental"
           --color                 Enable colored output messages
       -c, --config <config>       Specify the snapper configuration to use. Otherwise will perform for each snapper
-                                  configuration. Can list multiple configurations within quotes, space-separated
-                                  (e.g. -c "root home").
+                                  configuration. You can select multiple configurations
+                                  (e.g. -c "root" -c "home"; --config root --config home)
           --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name.
+          --dry-run               perform a trial run (no changes are written).
+          --mediapool             Specify the name of the tape MediaPool
       -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
-          --batch                 directory name on first backup"
           --nonotify              Disable graphical notification (via dbus)
           --nopv                  Disable graphical progress output (disable pv)
-      -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
+          --noionice              Disable setting of I/O class and priority options on target
+      -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh
                                   You should specify the remote machine's hostname or ip address. The 'root' user
-                                  must be permitted to login on the remote machine.
-      -p, --port <port>           The remote port.
+                                  must be permitted to login on the remote machine
+      -p, --port <port>           The remote port
       -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
-      -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt."
-                                  If multiple mount points are found with the same UUID, will prompt user."
-      -t, --target <target>       Specify the mountpoint of the BTRFS subvolume to back up to.
-          --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh. You
-                                  should specify the remote machine's hostname or ip address. The 'root' user must be
-                                  permitted to login on the remote machine.
-          --dry-run               perform a trial run where no changes are made.
+	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
+      -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt
+                                  If multiple mount points are found with the same UUID, will prompt for user selection 
+      -t, --target <target>       Specify the mountpoint of the backup device
+          --volumename            Specify the name of the tape volume
       -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
           --version		          show program version
 
@@ -246,15 +253,18 @@ sorgen. Folgende Sicherungstypen werden unterschieden:
 * btrfs-archive
 
   Stellt das Ziel-Gerät kein btrfs Dateisystem bereit (e.g. ext4, xfs,
-  ltofs tapes), kann der Sicherungstpy btrfs-archive angewendet werden.
+  ltofs tapes), kann der Sicherungstyp btrfs-archive angewendet werden.
 
   `dsnap-sync` wird anhand der Quell Snapshot-ID die Daten in ein
   gewöhnliches Unterverzeichnis kopieren. Dieses Stamm-Verzeichnis
   befindet sich unterhalb des Backup-Verzeichnisses auf dem Ziel-Gerät
   (target-subdirectory). Unterhalb des 'target-subdirectory' erstellt
-  `dsnap-sync` in Analogie zur `snapper` Struktur:
+  `dsnap-sync` in Analogie zur `snapper` Datenablabe folgende Struktur:
 
-  * der aktuelle btrfs Stream wird im Unterverzeichnis `snapshot` abgelegt
+  * ein Unterverzeichnis des Konfigurations-Namens (`archive-<config-name>`)
+  * ein Unterverzeichnis der Snapshot-ID (`<snapper-id>`)
+  * der aktuelle btrfs Stream wird im Unterverzeichnis abgelegt
+    (`<snapper-id>_[full | incremental].btrfs`) 
   * die Metadaten des Prozesses werden in der Datei `info.xml` abgelegt
 
   Steht `ltfs` zur Verfügung, ist ein Backup auf Bänder möglich.
@@ -311,8 +321,9 @@ der für Festplatten üblichen Funktionsweise implementiert. Ab Geräten
 der LTO5 Generation sind Sie in der Lage, Bänder für die LTFS-Nutzung
 vorzubareiten (formatieren, bzw. partitionieren).
 Anschließend können erfolgreich formatierte Bänder in das Dateisystem
-eingehängt werden (FUSE). Das Beschreiben und Auslesen der Daten erfolgt dann
-mit den gewohnten Betriebssystem Tools. Eine Open-Source Implementierung finden Sie z.B. unter 
+eingehängt werden (FUSE). Das Beschreiben und Auslesen der Daten erfolgt
+dann mit den gewohnten Betriebssystem Tools. Eine Open-Source Implementierung
+finden Sie z.B. unter 
 [LinearTapeFileSystem](https://github.com/LinearTapeFileSystem/ltfs).
 
 ## Mitarbeit
@@ -324,14 +335,16 @@ Vielleicht findet Ihr dort auch Anregungen.
 
 ## Ähnliche Projekte
 
-`dsnap-sync` basiert auf dem ursprünglichen Code von Wes Barnetts. Als open-source war
-meine Intention, die Erweiterungen in das Projekt zurückfliessen zu lassen.
-Neben der Tatsache, dass diese Version bashisms eleminiert hat, sieht Wes sich leider
-zeitlich ausser Stande, den neuen Code in angemessener Art und Weise zu prüfen um ihn
-anschließende in `snap-sync` einzubinden. Jeder ist willkommen dies zu tun.
+`dsnap-sync` basiert auf dem ursprünglichen Code von Wes Barnetts. Als 
+open-source war meine Intention, die Erweiterungen in das Projekt 
+zurückfliessen zu lassen. Neben der Tatsache, dass diese Version bashisms
+eleminiert hat, sieht Wes sich leider zeitlich ausser Stande, den neuen 
+Code in angemessener Art und Weise zu prüfen um ihn anschließende in 
+`snap-sync` einzubinden. Jeder ist willkommen dies zu tun.
 
-Bis dahin habe ich mich entschlossen, die Ergebnisse als Fork unter dem Namen `dsnap-sync`
-zu veröffentlichen. Die Namensämderung soll mögliche Verwechslungen vermeinden.
+Bis dahin habe ich mich entschlossen, die Ergebnisse als Fork unter dem 
+Namen `dsnap-sync` zu veröffentlichen. Die Namensämderung soll mögliche 
+Verwechslungen vermeinden.
 
 ## Lizenz
 

@@ -17,8 +17,8 @@ and combines it with managemnet functionality of `snapper`.
 
 `dsnap-sync` creates backups as btrfs-snapshots on a selectable target device.
 Plug in and mount any btrfs-formatted device to your system. Supported targets
-may be either local attached USB drives, as well as automountable remote host
-RAIDs.
+may be either local attached USB drives, automountable RAID devices or LTFS 
+aware tapes. All supported targets can be located on a remote host.
 If possible the backup process will send incremental snapshots to the target
 drive. If the snapshot will be stored on a remote host, the transport will be
 secured with ssh.
@@ -32,17 +32,19 @@ will offer details as a reference point.
 ## Backup process
 
 The default `dsnap-sync` backup process will iterate through all defined `snapper`
-configurations that are found on your source system. If you prefer to have single
-processes for each configuration, you are free to define isolated systemd-units or
-call `dsnap-sync` interactively while referencing the intended `snapper` configuration
-(option `-c` or `--config`).
+configurations that are found on your source system. 
+
+If you prefer to have single processes for each configuration or configuration
+groups, you are free to define isolated systemd-units. They will be triggerd 
+interactively or via timer units. `dsnap-sync` will cycle through each 
+referenced `snapper` configuration (option `-c` or `--config`).
 
 For each selected `snapper` configuration `dsnap-sync`
 
 * will present/select target device informations
 * will prepare snapper structures
 * will perform the actual backup
-  (handle backupdir, handle snapper structures, handle btrfs send /btrfs recieve)
+  (handle backupdir, handle snapper structures, handle btrfs send / btrfs recieve)
 * will finalize the actual backup
   (update snapper metadata for each source and target snapshot)
 * will perform cleanup tasks
@@ -57,30 +59,31 @@ will need to complete compared to a full backup process.
 
 ### Interactive backups
 
-An interactive process will gide you to select a mounted btrfs device.
-You can pre-select the target drive via [command line options](./README.md#Options).
+An interactive process will gide you to select a backup target.
+You can pre-select the target via [command line options](./README.md#Options).
 To uniquely define / select a target devices you either need to choose
 
 * a pair of a btrfs UUID and SUBVOLID
 * a TARGET name (read 'mount point')
+* a MediaPool / Tape VolumeName
 
 This will asure, that `dsnap-sync` can distinguish backup processes that
 have a commen source device, but save data to different target devices. As
-an example it might be advisable, to save the project subvolume redundantliy
+an example it might be advisable, to save the project subvolume redundantly
 on to independent targets (disk and tape).
 
 Before `dsnap-sync` will perform the backup, it will present the backupdir,
-spit out the source and target locations will. You have to confirm or adapt
+and spit out the source and target locations. You have to confirm or adapt
 the given values. You may use commandline options to supress interaction
 (e.g --noconfirm, --batch).
 
 
 ### Scheduled backups
 
-A scheduled process should be defined as a systemd.unit. Inside the unit
+A scheduled process should be defined as a systemd unit. Inside the unit
 definition the execution parameter will take the `dsnap-sync` call, appending
 all needed parameters as config options. In combination with a corresponding
-systemd.timer unit, you are able to finetune your backup needs.
+systemd timer unit, you are able to fine tune your backup needs.
 The [example section](usr/share/doc/dsnap-sync/Examples.md#systemd)
 will offer details as a reference point.
 
@@ -96,7 +99,7 @@ Following tools are used:
 - findmnt
 - sed
 - snapper
-- ssh
+- ssh / scp
 
 As an option, you can enrich interactive responses using
 
@@ -113,6 +116,7 @@ Following tools are used:
 - ltfs
 - mkltfs
 - mtx
+- perl
 - sed
 
 ## Installation
@@ -159,7 +163,8 @@ Please use your host software package manager.
       Options:
       -a, --automount <path>      start automount for given path to get a valid target mountpoint.
       -b, --backupdir <prefix>    backupdir is a relative path that will be appended to target backup-root
-	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
+          --backuptype <type>     Specify backup type <archive | child | parent>
+	      --batch                 no user interaction
       -d, --description <desc>    Change the snapper description. Default: "latest incremental backup"
           --label-finished <desc> snapper description tagging successful jobs. Default: "dsnap-sync backup"
           --label-running <desc>  snapper description tagging active jobs. Default: "dsnap-sync in progress"
@@ -167,25 +172,25 @@ Please use your host software package manager.
                                   Default: "dsnap-sync last incremental"
           --color                 Enable colored output messages
       -c, --config <config>       Specify the snapper configuration to use. Otherwise will perform for each snapper
-                                  configuration. Can list multiple configurations within quotes, space-separated
-                                  (e.g. -c "root home").
+                                  configuration. You can select multiple configurations
+                                  (e.g. -c "root" -c "home"; --config root --config home)
           --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name.
+          --dry-run               perform a trial run (no changes are written).
+          --mediapool             Specify the name of the tape MediaPool
       -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
-          --batch                 directory name on first backup"
           --nonotify              Disable graphical notification (via dbus)
           --nopv                  Disable graphical progress output (disable pv)
-      -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
+          --noionice              Disable setting of I/O class and priority options on target
+      -r, --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh
                                   You should specify the remote machine's hostname or ip address. The 'root' user
-                                  must be permitted to login on the remote machine.
-      -p, --port <port>           The remote port.
+                                  must be permitted to login on the remote machine
+      -p, --port <port>           The remote port
       -s, --subvolid <subvlid>    Specify the subvolume id of the mounted BTRFS subvolume to back up to. Defaults to 5.
-      -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt."
-                                  If multiple mount points are found with the same UUID, will prompt user."
-      -t, --target <target>       Specify the mountpoint of the BTRFS subvolume to back up to.
-          --remote <address>      Send the snapshot backup to a remote machine. The snapshot will be sent via ssh. You
-                                  should specify the remote machine's hostname or ip address. The 'root' user must be
-                                  permitted to login on the remote machine.
-          --dry-run               perform a trial run where no changes are made.
+	      --use-btrfs-quota       use btrfs-quota to calculate snapshot size
+      -u, --uuid <UUID>           Specify the UUID of the mounted BTRFS subvolume to back up to. Otherwise will prompt
+                                  If multiple mount points are found with the same UUID, will prompt for user selection 
+      -t, --target <target>       Specify the mountpoint of the backup device
+          --volumename            Specify the name of the tape volume
       -v, --verbose               Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
           --version		          show program version
 
@@ -218,28 +223,29 @@ backup types are differenciated:
 
   Please adapt the defaults, if your milage varies.
 
-* btrfs clone
+* btrfs-clone
 
   To duplicate an existing `snapper` configuration within a source host,
   you should use this backup type.
   It is useful, if a selected `snapper` configuration from the source
   host will be synced to a target external disk (disk-2-disk-2-disk).
-  The clone configuration will be managable via `snapper` management
-  tools as well. Of course the target device needs to offer a btrfs
-  filesystem to hold the snapshots.
+  The clone configuration will be managable via `snapper` as expected.
+  Please be aware, that the target device must be a btrfs filesystem 
+  that can save the snapshots.
 
 * btrfs-archive
 
   If the target device is not a btrfs filesystem (e.g. ext4,
   xfs, ltofs tapes), you need to use this backup type.
 
-  data are copied backupdir.
-  `dsnap-sync` will take the data of the source snapshot-ID and copy them
-  to an ordenary subdirectory. This Base-Directory will be located on the
-  target-device below the backupdir (target-subdirectory). Inside this
-  'target-subdirectory' `dsnap-sync` will mimic the `snapper` structure:
+  `dsnap-sync` will take the data of the source snapshot-ID and copy the
+  data as a stream file inside ther target-subdirectory. `dsnap-sync` will
+  mimic a `snapper` structure inside the 'target-subdirectory':
 
-  * the actual btrfs stream will we copied to a subdirectoy called `snapshot`
+  * create a config specific subdirectory (`archive-<config-name>`)
+  * create a snapshot-id subdirectory (`<snapper-id>`)
+  * create the btrfs stream file inside the subdirectory
+      (`<snapper-id>_[full | incremental].btrfs`) 
   * the proccess metadata are saved to a file called `info.xml`
 
   If you enabled the `ltfs` package, support for backups to tape is possible.
@@ -286,9 +292,9 @@ An open-source implementation can be found at
 
 ## Contributing
 
-Help is very welcome! Feel free to fork and issue a pull request to add features or
-tackle open issues. If you are requesting new features, please have a look at the
-TODO list. It might be already on the agenda.
+Help is very welcome! Feel free to fork and issue a pull request to add 
+features or tackle open issues. If you are requesting new features, please
+have a look at the TODO list. It might be already on the agenda.
 
 ## Related projects
 
