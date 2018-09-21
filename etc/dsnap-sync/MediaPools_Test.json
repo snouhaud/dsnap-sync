@@ -1,0 +1,214 @@
+{
+  "version": "0.0.3",
+  "MediaPools": "Media-Pools",
+  "MediaPool": [
+    {
+      "_comment": "MediaPolicy: append | overwrite",
+      "Name": "Pool 1",
+      "DefaultRetensionDays": "0",
+      "Tape-Type": "LTO7",
+      "Tape": [
+        {
+          "TapeId": "Tape1",
+          "TapeAttributes": [
+            {
+              "FileSystem": "LTFS",
+              "VolumeName": "Tape-0001",
+              "VolumeId": "000001",
+              "Slot": "1",
+              "MediaPolicy": "append",
+              "RetensionDate": "20180824000000",
+              "LastWrite": "2018082400000"
+            }
+          ]
+        },
+        {
+          "TapeId": "Tape2",
+          "TapeAttributes": [
+            {
+              "FileSystem": "LTFS",
+              "VolumeName": "Tape-0002",
+              "VolumeId": "000002",
+              "Slot": "2",
+              "MediaPolicy": "append",
+              "RetensionDate": "20180824000000",
+              "LastWrite": "2018082400000"
+            }
+          ]
+        },
+        {
+          "TapeId": "Tape3",
+          "TapeAttributes": [
+            {
+              "FileSystem": "LTFS",
+              "VolumeName": "Tape-0003",
+              "VolumeId": "000003",
+              "Slot": "3",
+              "MediaPolicy": "append",
+              "RetensionDate": "20180824000000",
+              "LastWrite": "2018082400000"
+            }
+          ]
+        },
+        {
+          "TapeId": "Tape4",
+          "TapeAttributes": [
+            {
+              "FileSystem": "LTFS",
+              "VolumeName": "Tape-0004",
+              "VolumeId": "000004",
+              "Slot": "4",
+              "MediaPolicy": "append",
+              "RetensionDate": "20180824000000",
+              "LastWrite": "2018082400000"
+            }
+          ]
+        },
+        {
+          "TapeId": "Tape5",
+          "TapeAttributes": [
+            {
+              "FileSystem": "LTFS",
+              "VolumeName": "Tape-0005",
+              "VolumeId": "000005",
+              "Slot": "5",
+              "MediaPolicy": "append",
+              "RetensionDate": "20180824000000",
+              "LastWrite": "20180912205500"
+            }
+          ]
+        }
+      ],
+      "Member": [
+        {
+          "VolumeName": "Tape-0001",
+          "VolumeId": "000001",
+          "Slot": "2",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0002",
+          "VolumeId": "000002",
+          "Slot": "2",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0003",
+          "VolumeId": "000003",
+          "Slot": "3",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0004",
+          "VolumeId": "000004",
+          "Slot": "4",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0005",
+          "VolumeId": "000005",
+          "Slot": "5",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0006",
+          "VolumeId": "000006",
+          "Slot": "6",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0007",
+          "VolumeId": "000007",
+          "Slot": "7",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0008",
+          "VolumeId": "000008",
+          "Slot": "8",
+          "MediaPolicy": "append",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        }
+      ]
+    },
+    {
+      "_comment": "MediaPolicy: append | overwrite",
+      "Name": "Pool 2",
+      "DefaultRetensionDays": "7",
+      "Tape-Type": "LTO7",
+      "Member": [
+        {
+          "VolumeName": "Tape-0009",
+          "VolumeId": "000001",
+          "Slot": "9",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0010",
+          "VolumeId": "000002",
+          "Slot": "10",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0011",
+          "VolumeId": "000003",
+          "Slot": "11",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0012",
+          "VolumeId": "000004",
+          "Slot": "12",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0013",
+          "VolumeId": "000005",
+          "Slot": "13",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0014",
+          "VolumeId": "000006",
+          "Slot": "14",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        },
+        {
+          "VolumeName": "Tape-0015",
+          "VolumeId": "000007",
+          "Slot": "15",
+          "MediaPolicy": "overwrite",
+          "RetensionDate": "20180824000000",
+          "LastWrite": "2018082400000"
+        }
+      ]
+    }
+  ]
+}
