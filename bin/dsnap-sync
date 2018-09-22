@@ -1613,8 +1613,16 @@ run_backup () {
 		            fi
 			fi
 		    else
+			# use source_id as common sync-id
 			snapper_common_sync_id=$snapper_source_id
 			snapper_common_sync_snapshot=$snapper_source_sync_snapshot
+		    fi
+		else
+		    # we have a common sync_id
+		    if [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
+			# btrfs send: we need to use the common sync_id as a valid parent
+			snapper_source_sync_id=$snapper_common_sync_id
+			snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_source_sync_id/snapshot
 		    fi
 		fi
 
