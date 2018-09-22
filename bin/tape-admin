@@ -22,7 +22,7 @@
 # Helper routines for tape handling
 
 progname="${0##*/}"
-version="0.0.5"
+version="0.0.6"
 
 # global variables
 color=0
@@ -523,9 +523,9 @@ ltfs_mount () {
 	if [ $verbose -ge 2 ]; then
 	    printf "${MAGENTA}LTFS mounting tape ${GREEN}'%s'${MAGENTA} to ${GREEN}'%s'${NO_COLOR}\n" \
 		   "$ltfs_devname" "$ltfs_mountpoint"
-	    ${LTFS} -o devname=$ltfs_devname -o verbose=$verbose $ltfs_mountpoint 2>${ERRFILE}
+	    ${LTFS} -o devname=$ltfs_devname -o verbose=$verbose $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
 	else
-	    ${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 2>${ERRFILE}
+	    ${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
 	fi
 	if [ $? -eq 0 ]; then
 	    return 0
@@ -1115,6 +1115,16 @@ mount_tape () {
 	printf "${BLUE}mount_tape...${NO_COLOR}\n"
     fi
 
+    if [ $verbose -ge 2 ]; then
+	if [ ${#volume_name } -ge 1 ]; then
+	    printf "${MAGENTA}MediaPool: ${GREEN}%s${NO_COLOR} (mounting tape: ${GREEN}%s${NO_COLOR})\n" \
+		    "${mediapool_name}" "${volume_name_active}"
+	else
+	    printf "${MAGENTA}MediaPool: ${GREEN}%s${NO_COLOR} (mounting next tape)\n" \
+		    "${mediapool_name}"
+	fi
+    fi
+
     ltfs_is_mounted
     if test $? -eq 0; then
 	if [ $verbose -ge 1 ]; then
@@ -1122,15 +1132,24 @@ mount_tape () {
 	fi
 
 	# check that mounted tape is member of selected mediapool
-	mtx_getlabel 0
+	slot_source="0"
+	mtx_getlabel ${slot_source}
 	if [ $? -eq 0 ]; then
 	    get_poolmember ${mediapool_name} ${volume_name_active}
 	    if [ $? -eq 1 ]; then
 		# unmount and recurse execution
+		if [ $verbose -ge 2 ]; then
+		    printf "${MAGENTA}Tape: ${GREEN}%s${NO_COLOR} is no valid member of selected MediaPool: ${GREEN}%s${NO_COLOR}\n" \
+			   "${volume_name_active}" "${mediapool_name}"
+		fi
 		ltfs_umount
 		if [ $? -eq 0 ]; then
 		    mtx_unload
 		    if [ $? -eq 0 ]; then
+			if [ $verbose -ge 2 ]; then
+			    printf "${MAGENTA}Tape: ${GREEN}%s${NO_COLOR} is no valid member of selected MediaPool: ${GREEN}%s${NO_COLOR}\n" \
+				   "${volume_name_active}" "${mediapool_name}"
+			fi
 			mount_tape "${mediapool_name}" "${volume_name}"
 			return 0
 		    else
