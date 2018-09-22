@@ -83,6 +83,7 @@ snapper_backup_type='none'
 snapper_config_postfix=
 snap_cleanup_algorithm="timeline"
 verbose=0
+volume_name=
 
 # ascii color
 BLUE=
@@ -146,7 +147,8 @@ check_snapper_failed_ids () {
 	if [ "$batch" ]; then
 	    answer="yes"
 	else
-	    printf "${MAGENTA}Found %s previous failed sync runs for '%s'${NO_COLOR}\n" "${snapper_failed_ids}" "$selected_config"
+	    printf "${MAGENTA}Found %s previous failed sync runs for '%s'${NO_COLOR}\n" \
+		   "${snapper_failed_ids}" "$selected_config"
 	    answer=no
 	    get_answer_yes_no "Delete failed backup snapshots [y/N]? " "$answer"
 	fi
@@ -273,20 +275,42 @@ get_archive_last_sync_id () {
     # target is LTFS tape
     if [ ${#volume_name} -gt 1 ]; then
 	case ${archive_type} in
-	    incremental)
-		cmd="find ${selected_target}/${backupdir}/${snapper_target_config} -name *_${archive_type}.btrfs \
-    	       	    | awk -F '.*/'  '{ gsub(/_${archive_type}.btrfs\$/,"_"); print \$2}' "
-		;;
+	    #incremental)
+	    #	cmd="find ${selected_target}/${backupdir}/${snapper_target_config} -name *_${archive_type}.btrfs \
+    	    #  	    | awk -F '.*/'  '{ gsub(/_${archive_type}.btrfs\$/,"_"); print \$2}' \
+	    #       | awk ' \$1 == $snapper_source_sync_id {print \$1} ' "
+	    #	;;
 	    *)
-		cmd="find ${selected_target}/${backupdir}/${snapper_target_config} -name *_${archive_type}.btrfs \
-    	       	    | awk -F '.*/'  '{ gsub(/_${archive_type}.btrfs\$/,"_"); print \$2}' "
+	        cmd="find ${selected_target}/${backupdir}/${snapper_target_config} -name *_${archive_type}.btrfs \
+    	       	    | awk -F '.*/'  '{ gsub(/_${archive_type}.btrfs\$/,"_"); cnt++} END {print cnt}'"
+		ret=$(eval $run_ssh "$cmd" 2>/dev/null)
+		if [ ${#ret} -ge 1 ]; then
+		    if [ $verbose -ge 3 ]; then
+			printf "${MAGENTA}Found ${GREEN}'%s'${MAGENTA} previous synced archives for config ${GREEN}'%s'${NO_COLOR}\n" \
+			       "${ret}" "$selected_config"
+		    fi
+		    # get last sync-id
+		    cmd="find ${selected_target}/${backupdir}/${snapper_target_config} -name *_${archive_type}.btrfs \
+    	       	    	      | awk -F '.*/'  '{ gsub(/_${archive_type}.btrfs\$/,"_") } END {print \$2}'"
+		else
+		    return 1
+		fi
 		;;
 	esac
     fi
 
     ret=$(eval $run_ssh "$cmd" 2>/dev/null)
     if [ ${#ret} -ge 1 ]; then
+	# ok, matching snapshot found
 	snapper_sync_id=$ret
+	if [ $verbose -ge 3 ]; then
+	    printf "Got archive snapshot: ${GREEN}'%s'${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR})\n" \
+		   $snapper_target_config $snapper_sync_id
+	fi
+	return 0
+    else
+	# no snapshot found
+	return 1
     fi
 }
 
@@ -689,7 +713,8 @@ get_snapper_last_sync_id () {
     local snapper_description=${2##snapper_description=}
     local snapper_uuid=${3##snapper_uuid=}
     local snapper_subvolid=${4##snapper_subvolid=}
-    local remote=${5##remote=}
+    local snapper_tapeid=${5##snapper_tapeid=}
+    local remote=${6##remote=}
     local run_ssh=''
 
     snapper_sync_id=0
@@ -697,6 +722,8 @@ get_snapper_last_sync_id () {
 
     if [ $verbose -ge 3 ]; then
 	printf "${MAGENTA}get_snapper_last_sync_id()...${NO_COLOR}\n"
+	#printf "${MAGENTA}snapper_description: ${GREEN}'%s'${NO_COLOR}\n" \
+	#       "${snapper_description}"
     fi
 
     # only process, if config does exist
@@ -726,7 +753,13 @@ get_snapper_last_sync_id () {
     if [ ${#snapper_subvolid} -ge 1 -a ${#snapper_uuid} -ge 1 ]; then
     	cmd="snapper --config $snapper_config list --type single \
 	     | awk '/$snapper_description/' \
-	     | awk '/subvolid=$snapper_subvolid, uuid=$snapper_uuid/' \
+	     | awk '/subvolid="$snapper_subvolid", uuid="$snapper_uuid"/' \
+	     | awk 'END {print \$1}'"
+    elif [ ${#snapper_tapeid} -ge 1 ]; then
+	# | awk '/"$snapper_description"' '/"$snap_description_finished/"'  \
+    	cmd="snapper --config $snapper_config list --type single \
+	     | awk '/$snapper_description/' \
+	     | awk '/tapeid="$snapper_tapeid"/' \
 	     | awk 'END {print \$1}'"
     else
 	cmd="snapper --config $snapper_config list --type single \
@@ -743,8 +776,13 @@ get_snapper_last_sync_id () {
 	if [ ${#snapper_subvolid} -ge 1 -a ${#snapper_uuid} -ge 1 ]; then
 	    cmd="snapper --config $snapper_config list --type single \
 	    	| awk '/$snap_description_finished/' \
-	    	| awk '/subvolid=$selected_subvol, uuid=$selected_uuid/' \
+	    	| awk '/subvolid="$selected_subvol", uuid="$selected_uuid"/' \
 		| awk 'END {print \$1}'"
+	elif [ ${#snapper_tapeid} -ge 1 ]; then
+    	    cmd="snapper --config $snapper_config list --type single \
+	     | awk '/$snap_description_finished/' \
+	     | awk '/tapeid="$snapper_tapeid"/' \
+	     | awk 'END {print \$1}'"
 	else
 	    cmd="snapper --config $snapper_config list --type single \
 	    	 | awk '/$snap_description_finished/' \
@@ -1207,15 +1245,16 @@ run_config_preparation () {
 	case $snapper_backup_type in
 	    btrfs-snapshot)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=" "snapper_subvolid=" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote="
 		;;
 	    btrfs-clone)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=" "snapper_subvolid=" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote="
 		;;
 	    btrfs-archive)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=" "snapper_subvolid=" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote="
+					 #"snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=${volume_name}" "remote="
 		;;
 	    *)
 		if [ $verbose -ge 3 ]; then
@@ -1255,20 +1294,22 @@ run_config_preparation () {
 		    get_archive_last_sync_id "snapper_config=${snapper_target_config}" \
 					     "archive_type=full" \
 					     "remote=${remote}"
-		    snapper_target_sync_id=$snapper_sync_id
 		    ;;
 		*)
 		    get_snapper_last_sync_id "snapper_config=${snapper_target_config}" \
 					     "snapper_description=${snap_description_synced}" \
-					     "snapper_uuid=" "snapper_subvolid=" "remote=${remote}"
-		    snapper_target_sync_id=$snapper_sync_id
+					     "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote=${remote}"
 		    ;;
 	    esac
+	    if [ $? -eq 0 ]; then
+		snapper_target_sync_id=$snapper_sync_id
+	    else
+		snapper_target_sync_id=0
+	    fi
 
 	    # check for corresponding source and target sync id's
 	    snapper_common_sync_id=0
 	    if [ $snapper_target_sync_id -ne $snapper_source_sync_id ]; then
-
 		# select commen sync id
 		get_snapper_sync_id "snapper_config=${selected_config}" "remote="
 		if [ $? -eq 0 ]; then
@@ -1285,7 +1326,7 @@ run_config_preparation () {
 			fi
 		    fi
 		else
-		    #printf "no commen sync id found.\n"
+		    # no commen sync id found
 		    snapper_target_sync_id=0
 		fi
 	    fi
@@ -1394,6 +1435,7 @@ run_backup () {
 	    if [ $donotify -gt 0 ]; then
 		notify_info "Backup in progress" "NOTE: Skipping '$selected_config' configuration."
 	    fi
+	    i=$(($i+1))
 	    continue
 	fi
 
@@ -1584,34 +1626,50 @@ run_backup () {
 		fi
 	    else
 	        # source holds synced snapshots
-	        if [ $verbose -ge 2 ]; then
-	            printf "${MAGENTA}Sending ${GREEN}incremental snapshot${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR}) for snapper config ${GREEN}'%s'${NO_COLOR} ...\n" \
-			   "$snapper_target_id" "$selected_config"
-	        fi
 	        if [ $verbose -ge 3 ]; then
-		    printf "Last synced ${GREEN}source${NO_COLOR} snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n" \
-			   "$snapper_source_sync_id" "$snapper_source_sync_snapshot"
 		    printf "New ${GREEN}source${NO_COLOR} snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n" \
 			   "$snapper_source_id" "$snapper_source_snapshot"
-		    printf "Last synced ${GREEN}target${NO_COLOR} snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n" \
-			   "$snapper_target_sync_id" "$snapper_target_sync_snapshot"
 		    printf "New ${GREEN}target${NO_COLOR} snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n" \
 			   "$snapper_target_id" "$snapper_target_snapshot/snapshot"
 		    printf "Common synced snapshot id: ${GREEN}'%s'${NO_COLOR}\n" \
 			   "$snapper_common_sync_id"
+		    printf "Last synced ${GREEN}source${NO_COLOR} snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n" \
+			   "$snapper_source_sync_id" "$snapper_source_sync_snapshot"
+		    printf "Last synced ${GREEN}target${NO_COLOR} snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n" \
+			   "$snapper_target_sync_id" "$snapper_target_sync_snapshot"
+	        fi
+	        if [ $verbose -ge 2 ]; then
+	            printf "${MAGENTA}Prepare ${GREEN}incremental snapshot${NO_COLOR} (id: ${GREEN}'%s'${NO_COLOR}) for snapper config ${GREEN}'%s'${NO_COLOR} ...\n" \
+			   "$snapper_target_id" "$selected_config"
 	        fi
 	        # verify that we have a matching source and target snapshot-id
 	        if [ $snapper_common_sync_id -eq 0 ]; then
-		    if [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
+		    if [ ${snapper_source_id} -eq ${snapper_target_sync_id} ]; then
+			# nothing to do, snapshot already in sync
+			if [ $verbose -ge 3 ]; then
+		            printf "${MAGENTA}Nothing to do! Source and target snapshot (id: ${GREEN}'%s'${MAGENTA}) are in sync.${NO_COLOR}\n" \
+				   "$snapper_target_sync_id"
+			fi
+			# go for next configuration
+			i=$(($i+1))
+			continue
+		    elif [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
 			if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
 			    # try to find last target_sync_id in source_config
 		            get_snapper_sync_id "snapper_config=${snapper_source_config}" "remote="
 		            if [ $? -eq 0 ]; then
+				snapper_source_sync_id=$snapper_sync_id
 				snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
 		            else
-				printf "no commen sync id.\n"
+				printf "${RED}Error: ${MAGENTA}No common sync id found. Aborting backup for config ${GREEN}'%s'${NOCOLOR}\n"
+				# go for next configuration
+				i=$(($i+1))
+				continue
 		            fi
 			fi
+		    elif [ ${snapper_source_id} != ${snapper_source_sync_id} ]; then
+			snapper_common_sync_id=$snapper_source_sync_id
+			snapper_common_sync_snapshot=$snapper_source_sync_snapshot
 		    else
 			# use source_id as common sync-id
 			snapper_common_sync_id=$snapper_source_id
@@ -1620,7 +1678,7 @@ run_backup () {
 		else
 		    # we have a common sync_id
 		    if [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
-			# btrfs send: we need to use the common sync_id as a valid parent
+			# btrfs send: use common sync_id as a valid parent
 			snapper_source_sync_id=$snapper_common_sync_id
 			snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_source_sync_id/snapshot
 		    fi
@@ -1643,19 +1701,27 @@ run_backup () {
 			*)
 			    # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
 			    snapper_target_stream=${snapper_target_id}_incremental.btrfs
-			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
-			        | $cmd_pv \
-				$cmd_ionice $ssh cat >$snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
+			    if [ -z $remote ]; then
+				cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+		     	     	| $cmd_pv \
+			     	$cmd_ionice cat > $snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
+			    else
+				cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
+		     	     	| $cmd_pv \
+			     	$cmd_ionice $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>$BTRFS_PIPE"
+			    fi
 			    ;;
 		    esac
 		    if [ $verbose -ge 2 ]; then
-		        printf "${GREEN}btrfs send${NO_COLOR} is using \n  parent snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR}) and\n  snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n  constructing incremental data-stream ...\n" \
-			       "$snapper_common_sync_id" "$snapper_common_sync_snapshot" "$snapper_source_id" "$snapper_source_snapshot"
+		        printf "%b" "${GREEN}btrfs send${NO_COLOR} is using\n" \
+			       "  parent snapshot id: ${GREEN}'$snapper_common_sync_id'${NO_COLOR} (path: ${GREEN}'$snapper_common_sync_snapshot'${NO_COLOR}) and\n" \
+			       "  snapshot id: ${GREEN}'$snapper_source_id'${NO_COLOR} (path: ${GREEN}'$snapper_source_snapshot'${NO_COLOR})\n" \
+			       "  to construct an incremental data-stream ...\n"
 		    fi
 		    if [ $verbose -ge 3 ]; then
 		        printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
 		    fi
-		    eval $cmd 1>/dev/null
+		    $(eval $cmd) 1>/dev/null
 		    if [ "$?" -gt 0 ]; then
 			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_PIPE)"
 			die "btrfs pipe error."
@@ -1821,8 +1887,8 @@ run_finalize () {
 		# save target-id
 		if [ $snapper_source_id -gt 0 ]; then
 		    cmd="snapper --config $selected_config modify \
-		    	     --userdata \"tapeid=$volume_name\" \
-			     	     $snapper_source_id"
+		    	 --userdata \"tapeid=$volume_name\" \
+			 $snapper_source_id"
 
 		    if [ $verbose -ge 3 ]; then
 			printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
@@ -2084,8 +2150,6 @@ select_target () {
 			"$selected_fstype" "$selected_uuid" "$selected_subvol"
 		 ;;
 	     ltfs)
-		 volume_name=$(attr -g ltfs.volumeName ${selected_target})
-		 volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
 		 printf "${MAGENTA}You selected %s target (VolumeName=${GREEN}'%s'${MAGENTA})${NO_COLOR}.\n" \
 			"$selected_fstype" "$volume_name"
 		 ;;
@@ -2520,7 +2584,6 @@ verify_archive_structure () {
 		printf "${MAGENTA}Create${NO_COLOR} path ${GREEN}'%s'${NO_COLOR} to store target snapshot.\n" \
 		       "$backup_root/$snapper_id"
 	    fi
-
 	    ret=$(eval $ssh mkdir --mode=0700 \
 		   $backup_root/$snapper_id)
 	    if [ $? -ne 0 ]; then
