@@ -1604,7 +1604,7 @@ run_backup () {
 	        if [ $snapper_common_sync_id -eq 0 ]; then
 		    if [ ${snapper_source_sync_id} != ${snapper_target_sync_id} ]; then
 			if [ $snapper_target_sync_id -lt $snapper_target_id ]; then
-			    # select commen sync id
+			    # try to find last target_sync_id in source_config
 		            get_snapper_sync_id "snapper_config=${snapper_source_config}" "remote="
 		            if [ $? -eq 0 ]; then
 				snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/snapshot
@@ -1648,9 +1648,11 @@ run_backup () {
 				$cmd_ionice $ssh cat >$snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
 			    ;;
 		    esac
+		    if [ $verbose -ge 2 ]; then
+		        printf "${GREEN}btrfs send${NO_COLOR} is using \n  parent snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR}) and\n  snapshot id: ${GREEN}'%s'${NO_COLOR} (path: ${GREEN}'%s'${NO_COLOR})\n  constructing incremental data-stream ...\n" \
+			       "$snapper_common_sync_id" "$snapper_common_sync_snapshot" "$snapper_source_id" "$snapper_source_snapshot"
+		    fi
 		    if [ $verbose -ge 3 ]; then
-		        printf "${GREEN}btrfs send${NO_COLOR} is using snapshot ${GREEN}'%s'${NO_COLOR} from ${GREEN}source${NO_COLOR} to sync metadata for new snapshot ${GREEN}'%s'${NO_COLOR} ...\n" \
-			       "$snapper_source_sync_snapshot" "$snapper_source_snapshot"
 		        printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
 		    fi
 		    eval $cmd 1>/dev/null
@@ -1662,7 +1664,7 @@ run_backup () {
 		    # is this clause possible?
 		    if [ $verbose -ge 3 ]; then
 		        printf "${RED}Error: ${NO_COLOR}No commen sync snapshot ${GREEN}'%s'${NO_COLOR} on ${GREEN}source${NO_COLOR} to sync metadata ...\n" \
-			       "$snapper_source_sync_snapshot"
+			       "$snapper_common_sync_snapshot"
 	                die "btrfs send/recieve error."
 		    fi
 	        fi
@@ -1695,6 +1697,11 @@ run_backup () {
 	# finalize backup tasks
 	run_finalize ${selected_config}
 	run_cleanup ${selected_config}
+
+	if [ $verbose -ge 1 ]; then
+	printf "${MAGENTA}Backup complete:${NOCOLOR} id=${GREEN}'%s'${NO_COLOR}, config=${GREEN}'%s'${NO_COLOR}\n" \
+	       "$snapper_source_id" "$selected_config"
+	fi
 
 	i=$(($i+1))
     done
@@ -1730,232 +1737,219 @@ run_finalize () {
 	       ${selected_config}
     fi
 
-    #i=-1
-    #for selected_config in $selected_configs; do
-    #	i=$(($i+1))
+    SNAP_SYNC_EXCLUDE=no
 
-	SNAP_SYNC_EXCLUDE=no
+    if [ -f "/etc/snapper/configs/$selected_config" ]; then
+        . /etc/snapper/configs/$selected_config
+    else
+        die "Selected snapper configuration '$selected_config' does not exist."
+    fi
 
-	if [ -f "/etc/snapper/configs/$selected_config" ]; then
-            . /etc/snapper/configs/$selected_config
-	else
-            die "Selected snapper configuration '$selected_config' does not exist."
-	fi
-
-	cont_backup=$(echo \$snapper_activate_$i)
-	if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
-	    if [ $donotify -gt 0 ]; then
-		notify_info "Finalize backup" "NOTE: Skipping '$selected_config' configuration."
-            fi
-	    continue
-	fi
-
+    cont_backup=$(echo \$snapper_activate_$i)
+    if [ "$cont_backup" = "no" ] || [ "$SNAP_SYNC_EXCLUDE" = "yes" ]; then
 	if [ $donotify -gt 0 ]; then
-	    notify_info "Finalize backup" "Cleanup tasks for configuration '$selected_config'."
+	    notify_info "Finalize backup" "NOTE: Skipping '$selected_config' configuration."
+        fi
+	continue
+    fi
+
+    if [ $donotify -gt 0 ]; then
+	notify_info "Finalize backup" "Cleanup tasks for configuration '$selected_config'."
+    fi
+
+    # retrieve config specific infos from pseudo Arrays
+    snapper_source_config=$(eval echo \$snapper_source_config_$i)
+    backupdir=$(eval echo \$backupdir_$i)
+    backup_root=$(eval echo \$backup_root_$i)
+    snapper_backup_type=$(eval echo \$snapper_backup_type_$i)
+    snapper_source_sync_id=$(eval echo \$snapper_source_sync_id_$i)
+    snapper_target_sync_id=$(eval echo \$snapper_target_sync_id_$i)
+    snapper_source_sync_snapshot=$(eval echo \$snapper_source_sync_snapshot_$i)
+    snapper_source_id=$(eval echo \$snapper_source_id_$i)
+    snapper_source_snapshot=$(eval echo \$snapper_source_snapshot_$i)
+    snapper_source_info=$(eval echo \$snapper_source_info_$i)
+    snapper_target_config=$(eval echo \$snapper_target_config_$i)
+    snapper_target_snapshot=$(eval echo \$snapper_target_snapshot_$i)
+    #tape_id=$(eval echo \$tape_id_$i)
+
+    # It's important not to change the values of the snapper key/value pairs ($userdata)
+    # which is stored in snappers info.xml file of the source snapshot.
+    # This is how we find the parent.
+
+    src_host=$(cat /etc/hostname)
+    src_uuid=$(findmnt --noheadings --output UUID --target $SUBVOLUME)
+    src_subvolid=$(findmnt --noheadings --output OPTIONS --target $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
+
+    # Tag new snapshots key/value parameter
+    if [ $verbose -ge 2 ]; then
+	printf "${MAGENTA}Tagging target ...${NO_COLOR}\n"
+    fi
+    if [ "$dryrun" -eq 0 ]; then
+	# target snapshot
+	# 1) wait for target snapshot to show up in snapper list
+	#    find "$snapper_target_sync_id" -> marked as "$snap_description_running"
+	# 2) toggle metadata -> mark as "$snap_description_finished", reference "$target_userdata" (host, uuid, subvolid)
+	#    snapper orders userdata pairs lexical ascending
+
+	# !!! ugly hack !!!:
+	# Problem: how to trigger that database is synced? -> a feature request is send to snapper upstream source
+	# Solution1: right now, it is no-deterministic, when the entry in the listing will show up
+	#           -> wait ii_max * ii_sleep seconds ( 20*15 = 300 -> 5 Min)
+	#           for snapper to list target snapshot in database.
+	local ii=1
+	local ii_max=20
+	local ii_sleep=15
+
+	# Solution2: kill running snapperd
+	#            -> will restart and sync; any unseen interdependencies
+	snapperd_pid=$(eval $ssh pgrep snapperd)
+	if [ $verbose -ge 3 ]; then
+	    printf "${MAGENTA}Kill runnint ${GREEN}snapperd${MAGENTA} on target id:${GREEN}'%s'${NO_COLOR} ...\n" \
+		   "$snapperd_pid"
+	fi
+	$(eval $ssh killall -SIGTERM snapperd)
+
+	if [ $verbose -ge 3 ]; then
+	    printf "${MAGENTA}Identify snapper id ${GREEN}'%s'${MAGENTA} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+		   "$snapper_target_id" "$snapper_target_config"
 	fi
 
-	# retrieve config specific infos from pseudo Arrays
-	snapper_source_config=$(eval echo \$snapper_source_config_$i)
-	backupdir=$(eval echo \$backupdir_$i)
-	backup_root=$(eval echo \$backup_root_$i)
-	snapper_backup_type=$(eval echo \$snapper_backup_type_$i)
-	snapper_source_sync_id=$(eval echo \$snapper_source_sync_id_$i)
-	snapper_target_sync_id=$(eval echo \$snapper_target_sync_id_$i)
-	snapper_source_sync_snapshot=$(eval echo \$snapper_source_sync_snapshot_$i)
-	snapper_source_id=$(eval echo \$snapper_source_id_$i)
-	snapper_source_snapshot=$(eval echo \$snapper_source_snapshot_$i)
-	snapper_source_info=$(eval echo \$snapper_source_info_$i)
-	snapper_target_config=$(eval echo \$snapper_target_config_$i)
-	snapper_target_snapshot=$(eval echo \$snapper_target_snapshot_$i)
-	#tape_id=$(eval echo \$tape_id_$i)
+	# construct snapper match command
+	case $snapper_backup_type in
+	    btrfs-archive)
+		# archive btrfs-snapshot to non btrfs-filesystem on target (e.g tape, ext4)
+		# save target-id
+		if [ $snapper_source_id -gt 0 ]; then
+		    cmd="snapper --config $selected_config modify \
+		    	     --userdata \"tapeid=$volume_name\" \
+			     	     $snapper_source_id"
 
-	# It's important not to change the values of the snapper key/value pairs ($userdata)
-	# which is stored in snappers info.xml file of the source snapshot.
-	# This is how we find the parent.
+		    if [ $verbose -ge 3 ]; then
+			printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+			       "$snapper_source_id" "$selected_config"
+			printf "calling: '%s'\n" "$(eval $cmd)"
+		    fi
+		    ret=$(eval "$cmd")
+		    if [ $verbose -ge 3 ]; then
+			printf "return: '%s'\n" "$?"
+		    fi
+		    sync
 
-	src_host=$(cat /etc/hostname)
-	src_uuid=$(findmnt --noheadings --output UUID --target $SUBVOLUME)
-	src_subvolid=$(findmnt --noheadings --output OPTIONS --target $SUBVOLUME | sed -e 's/.*subvolid=\([0-9]*\).*/\1/')
+		    # update tape attributes
+		    if [ ${#mediapool_name} -gt 1 ] && [ ${#volume_name} -gt 1 ]; then
+			# read mounted LTFS structures
+			$ssh tape-admin --verbose=$verbose --update-lastwrite ${mediapool_name} ${volume_name}
+			$ssh tape-admin --verbose=$verbose --update-retensiondate ${mediapool_name} ${volume_name}
+		    fi
+		fi
+		return 0
+		;;
+	    btrfs-clone)
+		# no tagging needed
+		return 0
+		;;
+	    btrfs-snapshot)
+		# create btrfs-snapshot on target
+	        cmd="$ssh snapper --config \"$snapper_target_config\" list --type single \
+	    	    | awk ' /'\"$snap_description_running\"'/ ' \
+		    | awk -F '|' ' \$1 == $snapper_target_id {print \$1} ' "
+		;;
+	esac
 
-	# Tag new snapshots key/value parameter
+	while [ "$ii" -le  "$ii_max" ]; do
+	    if [ $verbose -ge 3 ]; then
+		printf "calling: '%s'\n" "$cmd"
+	    fi
+	    ret=$(eval "$cmd")
+	    if [ $? -eq 0 ]; then
+		if [ $ret -eq $snapper_target_id ]; then
+		    # got snapshot as $snapper_target_id
+		    if [ $verbose -ge 3 ]; then
+			printf "${MAGENTA}Found${NO_COLOR} snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR}\n" \
+			       "$snapper_target_id" "$snapper_target_config"
+		    fi
+ 		    if [ $verbose -ge 3 ]; then
+			printf "${MAGENTA}Tagging metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+			       "$snapper_target_id" "$snapper_target_config"
+			#printf "calling: '%s'\n" "$($cmd)"
+		    fi
+		    # call command (respect needed quotes)
+		    if [ $remote ]; then
+			ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
+			    	   --description \\\'$snap_description_finished\\\' \
+			    	   --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
+			    	   --cleanup-algorithm \'timeline\' \
+			    	   \'$snapper_target_id\')
+		    else
+			ret=$(eval snapper --config $snapper_target_config modify \
+			    	   --description "$snap_description_finished" \
+				   --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
+				   --cleanup-algorithm "timeline" \
+			     	   $snapper_target_id)
+		    fi
+		    if [ $verbose -ge 3 ]; then
+			printf "return: '%s'\n" "$ret"
+		    fi
+		    break
+		fi
+	    fi
+	    if [ $verbose -ge 3 ]; then
+		printf "%s/%s: ${RED}Waiting another '%s' seconds${NO_COLOR} for snappers database update on target ...\n" \
+		       "$ii" "$ii_max" "$ii_sleep"
+	    fi
+	    sleep $ii_sleep
+	    ii=$(($ii + 1))
+	done
+
+	# source snapshot
 	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}Tagging target ...${NO_COLOR}\n"
+	    printf "${MAGENTA}Tagging source ...${NO_COLOR}\n"
 	fi
-	if [ "$dryrun" -eq 0 ]; then
-	    # target snapshot
-	    # 1) wait for target snapshot to show up in snapper list
-	    #    find "$snapper_target_sync_id" -> marked as "$snap_description_running"
-	    # 2) toggle metadata -> mark as "$snap_description_finished", reference "$target_userdata" (host, uuid, subvolid)
-	    #    snapper orders userdata pairs lexical ascending
-
-	    # !!! ugly hack !!!:
-	    # Problem: how to trigger that database is synced? -> a feature request is send to snapper upstream source
-	    # Solution1: right now, it is no-deterministic, when the entry in the listing will show up
-	    #           -> wait ii_max * ii_sleep seconds ( 20*15 = 300 -> 5 Min)
-	    #           for snapper to list target snapshot in database.
-	    local ii=1
-	    local ii_max=20
-	    local ii_sleep=15
-
-	    # Solution2: kill running snapperd
-	    #            -> will restart and sync; any unseen interdependencies
-	    snapperd_pid=$(eval $ssh pgrep snapperd)
-	    if [ $verbose -ge 3 ]; then
-		printf "${MAGENTA}Kill runnint ${GREEN}snapperd${MAGENTA} on target id:${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapperd_pid"
-	    fi
-	    $(eval $ssh killall -SIGTERM snapperd)
+	if [ $snapper_source_id -gt 0 ]; then
+	    cmd="snapper --config $selected_config modify \
+	    		 --description \"$snap_description_synced\" \
+			 --userdata \"backupdir=$backupdir, important=yes, host=$remote, subvolid=$selected_subvol, uuid=$selected_uuid\" \
+			 --cleanup-algorithm \"timeline\" \
+			 $snapper_source_id"
 
 	    if [ $verbose -ge 3 ]; then
-		printf "${MAGENTA}Identify snapper id ${GREEN}'%s'${MAGENTA} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-		       "$snapper_target_id" "$snapper_target_config"
+		printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+		       "$snapper_source_id" "$selected_config"
+		#printf "calling: '%s'\n" "$(eval $cmd)"
+		printf "calling: '%s'\n" "$cmd"
 	    fi
-
-	    # construct snapper match command
-	    case $snapper_backup_type in
-		btrfs-archive)
-		    # archive btrfs-snapshot to non btrfs-filesystem on target (e.g tape, ext4)
-		    # save target-id
-		    if [ $snapper_source_id -gt 0 ]; then
-			cmd="snapper --config $selected_config modify \
-			     --userdata \"tapeid=$volume_name\" \
-			     $snapper_source_id"
-
-			if [ $verbose -ge 3 ]; then
-			    printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-				   "$snapper_source_id" "$selected_config"
-			    printf "calling: '%s'\n" "$(eval $cmd)"
-			fi
-			ret=$(eval "$cmd")
-			if [ $verbose -ge 3 ]; then
-			    printf "return: '%s'\n" "$?"
-			fi
-			sync
-
-			# update tape attributes
-			if [ ${#mediapool_name} -gt 1 ] && [ ${#volume_name} -gt 1 ]; then
-			    # read mounted LTFS structures
-			    $ssh tape-admin --verbose=$verbose --update-lastwrite ${mediapool_name} ${volume_name}
-			    $ssh tape-admin --verbose=$verbose --update-retensiondate ${mediapool_name} ${volume_name}
-			fi
-		    fi
-		    return 0
-		    ;;
-		btrfs-clone)
-		    # no tagging needed
-		    return 0
-		    ;;
-		btrfs-snapshot)
-		    # create btrfs-snapshot on target
-	            cmd="$ssh snapper --config \"$snapper_target_config\" list --type single \
-	    	      | awk ' /'\"$snap_description_running\"'/ ' \
-		      | awk -F '|' ' \$1 == $snapper_target_id {print \$1} ' "
-		    ;;
-	    esac
-
-	    while [ "$ii" -le  "$ii_max" ]; do
-		if [ $verbose -ge 3 ]; then
-		    printf "calling: '%s'\n" "$cmd"
-		fi
-		ret=$(eval "$cmd")
-		if [ $? -eq 0 ]; then
-		    if [ $ret -eq $snapper_target_id ]; then
-			# got snapshot as $snapper_target_id
-			if [ $verbose -ge 3 ]; then
-			    printf "${MAGENTA}Found${NO_COLOR} snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR}\n" \
-				   "$snapper_target_id" "$snapper_target_config"
-			fi
-
- 			if [ $verbose -ge 3 ]; then
-			    printf "${MAGENTA}Tagging metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-				   "$snapper_target_id" "$snapper_target_config"
-			    #printf "calling: '%s'\n" "$($cmd)"
-			fi
-
-			# call command (respect needed quotes)
-			if [ $remote ]; then
-			    ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
-			    	       --description \\\'$snap_description_finished\\\' \
-			    	       --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
-			    	       --cleanup-algorithm \'timeline\' \
-			    	       \'$snapper_target_id\')
-			else
-			    ret=$(eval snapper --config $snapper_target_config modify \
-			    		  --description "$snap_description_finished" \
-					  --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
-					  --cleanup-algorithm "timeline" \
-			     		  $snapper_target_id)
-			fi
-			if [ $verbose -ge 3 ]; then
-			    printf "return: '%s'\n" "$ret"
-			fi
-			break
-		    fi
-		fi
-		if [ $verbose -ge 3 ]; then
-		    printf "%s/%s: ${RED}Waiting another '%s' seconds${NO_COLOR} for snappers database update on target ...\n" \
-			   "$ii" "$ii_max" "$ii_sleep"
-		fi
-		sleep $ii_sleep
-		ii=$(($ii + 1))
-	    done
-
-	    # source snapshot
-	    if [ $verbose -ge 2 ]; then
-		printf "${MAGENTA}Tagging source ...${NO_COLOR}\n"
+	    ret=$(eval "$cmd")
+	    if [ $verbose -ge 3 ]; then
+		printf "return: '%s'\n" "$?"
 	    fi
+	    sync
+	fi
+	if [ ${#snapper_source_sync_id} -gt 0 ]; then
+	    # TODO: no method to remove userdata pair, use awk
+	    cmd="snapper --config $selected_config modify \
+	    		 --description \"$snap_description_finished\" \
+			 --userdata \"important=no\" \
+			 $snapper_source_sync_id"
 
-	    if [ $snapper_source_id -gt 0 ]; then
-		cmd="snapper --config $selected_config modify \
-		 	     --description \"$snap_description_synced\" \
-			     --userdata \"backupdir=$backupdir, important=yes, host=$remote, subvolid=$selected_subvol, uuid=$selected_uuid\" \
-			     --cleanup-algorithm \"timeline\" \
-			     $snapper_source_id"
-
-		if [ $verbose -ge 3 ]; then
-		    printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-			   "$snapper_source_id" "$selected_config"
-		    #printf "calling: '%s'\n" "$(eval $cmd)"
-		    printf "calling: '%s'\n" "$cmd"
-		fi
-		ret=$(eval "$cmd")
-		if [ $verbose -ge 3 ]; then
-		    printf "return: '%s'\n" "$?"
-		fi
-		sync
+	    if [ $verbose -ge 3 ]; then
+		printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper sync id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+		       "$snapper_source_sync_id" "$selected_config"
+		printf "calling: '%s'\n" "$cmd"
 	    fi
-	    if [ ${#snapper_source_sync_id} -gt 0 ]; then
-		# TODO: no method to remove userdata pair, use awk
-		cmd="snapper --config $selected_config modify \
-			     --description \"$snap_description_finished\" \
-			     --userdata \"important=no\" \
-			     $snapper_source_sync_id"
-
-		if [ $verbose -ge 3 ]; then
-		    printf "${MAGENTA}Tagging snapper metadata${NO_COLOR} for snapper sync id ${GREEN}'%s'${NO_COLOR} on source for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-			   "$snapper_source_sync_id" "$selected_config"
-		    printf "calling: '%s'\n" "$cmd"
-		fi
-		ret=$(eval "$cmd")
-		snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_source_sync_id/snapshot
-	    else
-		snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_source_id/snapshot
-	    fi
+	    ret=$(eval "$cmd")
+	    snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_source_sync_id/snapshot
 	else
-	    # dry-run output
-	    cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata --cleanup-algorithm $snap_cleanup_algorithm $snapper_sync_id"
-	    printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
-	    cmd="snapper --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_sync_id"
-	    printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
-	    cmd="snapper --config $selected_config modify --description $snap_description_finished $snapper_source_sync_id"
-	    printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
+	    snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_source_id/snapshot
 	fi
-
-	if [ $verbose -ge 1 ]; then
-	    printf "Backup complete: id=${GREEN}'%s'${NO_COLOR}, config=${GREEN}'%s'${NO_COLOR}\n" \
-		   "$snapper_source_id" "$selected_config"
-	fi
-    #done
+    else
+	# dry-run output
+	cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata --cleanup-algorithm $snap_cleanup_algorithm $snapper_sync_id"
+	printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
+	cmd="snapper --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_sync_id"
+	printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
+	cmd="snapper --config $selected_config modify --description $snap_description_finished $snapper_source_sync_id"
+	printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
+    fi
 }
 
 select_target () {
