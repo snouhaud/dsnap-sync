@@ -949,6 +949,10 @@ parse_params () {
 		mediapool_name="$2"
 		shift 2
 		;;
+	    --mode)
+		backup_mode="$2"
+		shift 2
+		;;
 	    --nonotify)
 		donotify=0
 		shift 1
@@ -1070,6 +1074,10 @@ parse_params () {
 		mediapool_name=${1#*=}
 		shift
 		;;
+	    --mode=*)
+		backup_mode=${1#*=}
+		shift
+		;;
 	    --port=*)
 		port=${1#*=}
 		shift
@@ -1171,6 +1179,7 @@ parse_params () {
 	printf "  TARGET name:      '%s'\n" "$target_cmdline"
 	printf "  Backupdir:        '%s'\n" "$backupdir_cmdline"
 	printf "  Backup Type:      '%s'\n" "$backuptype_cmdline"
+	printf "  Backup Mode:      '%s'\n" "$backup_mode"
 	printf "  config postfix:   '%s'\n" "$snapper_config_postfix"
 	printf "  remote host:      '%s'\n" "$remote"
 	printf "  ssh options:      '%s'\n" "$ssh"
@@ -1608,10 +1617,10 @@ run_backup () {
 		 ;;
 	esac
 	if [ "$dryrun" -eq 0 ]; then
-	    if [ "$snapper_source_sync_id" -eq 0 ] || [ "$snapper_target_sync_id" -eq 0 ]; then
-	        # target never received any snapshot before
+	    if [ "$snapper_source_sync_id" -eq 0 ] || [ "$snapper_target_sync_id" -eq 0 ] || [ "$backup_mode" = "full" ]] ; then
+	        # send full snapshot to target
 	        if [ $verbose -ge 2 ]; then
-	            printf "${MAGENTA}Sending ${GREEN}first snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
+	            printf "${MAGENTA}Sending ${GREEN}snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
 			   "$selected_config" "$snapper_source_id" "$snapper_source_snapshot_size"
 	        fi
 		# the actual data sync to the target
@@ -1690,13 +1699,13 @@ run_backup () {
 		    case $selected_fstype in
 			btrfs)
 	       		    # Sends the difference between the new snapshot and old synced snapshot.
-			    # Using the flag -p (parent) will require the availibility of an identical readonly
+			    # Using the flag -c (clone-src) will require the availibility of an identical readonly
 			    # subvolume on the source and the receiving location (the parent-id).
 			    # using "btrfs send -p" instead of "btrfs send -c", then no parent search would be
 			    # needed (Andreij explained in: https://www.spinics.net/lists/linux-btrfs/msg69369.html)
 			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 			    	| $cmd_pv \
-				$cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot 2>$BTRFS_PIPE"
+				$cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot/ 2>$BTRFS_PIPE"
 			    ;;
 			*)
 			    # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
@@ -1721,11 +1730,25 @@ run_backup () {
 		    if [ $verbose -ge 3 ]; then
 		        printf "${GREEN}btrfs command:${NO_COLOR} '%s'\n" "$cmd"
 		    fi
-		    $(eval $cmd) 1>/dev/null
-		    if [ "$?" -gt 0 ]; then
-			printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_PIPE)"
-			die "btrfs pipe error."
-		    fi
+		    $(eval $cmd) 2>&1 1>/dev/null
+		    case $? in
+			0)
+			    ;;
+			127)
+			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'127'${NO_COLOR}\n"
+			    ;;
+			*)
+			    printf "${RED}btfs pipe ERROR!\n"
+			    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_PIPE)"
+			    #printf "${RED}BTRFS_SEND_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_SEND_PIPE)"
+			    #printf "${RED}BTRFS_RECIEVE_PIPE: %s${NO_COLOR}\n" "$(cat $BTRFS_RECIEVE_PIPE)"
+			    #die "btrfs pipe error."
+			    # go for next configuration
+			    run_cleanup ${selected_config}
+			    i=$(($i+1))
+			    continue
+			    ;;
+		    esac
 	        else
 		    # is this clause possible?
 		    if [ $verbose -ge 3 ]; then
@@ -1873,7 +1896,7 @@ run_finalize () {
 	    printf "${MAGENTA}Kill runnint ${GREEN}snapperd${MAGENTA} on target id:${GREEN}'%s'${NO_COLOR} ...\n" \
 		   "$snapperd_pid"
 	fi
-	$(eval $ssh killall -SIGTERM snapperd)
+	$(eval $ssh killall -SIGTERM snapperd 2>/dev/null)
 
 	if [ $verbose -ge 3 ]; then
 	    printf "${MAGENTA}Identify snapper id ${GREEN}'%s'${MAGENTA} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
