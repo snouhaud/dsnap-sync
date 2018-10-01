@@ -27,7 +27,7 @@
 # difference for the next incremental snapshot.
 
 progname="${0##*/}"
-version="0.6.1"
+version="0.6.2"
 
 # The following lines are modified by the Makefile or
 # find_snapper_config script
@@ -2687,7 +2687,7 @@ verify_snapper_config () {
 		   "$selected_uuid" "$selected_subvol" "$selected_config"
 	    printf "Please cleanup for further processing.\n"
 	    error "Skipping configuration $selected_config."
-	    selected_configs=$(eval echo  $selected_configs | sed -e "s/\($selected_config\)//")
+	    $snapper_activate_$i="no"
 	    continue
 	fi
     fi
