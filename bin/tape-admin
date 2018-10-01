@@ -22,7 +22,7 @@
 # Helper routines for tape handling
 
 progname="${0##*/}"
-version="0.0.7"
+version="0.0.8"
 
 # global variables
 color=0
@@ -655,6 +655,48 @@ make_temp_file() {
   fi
 }
 
+media_change () {
+    local mediapools_json=${mediapools:-$mediapools_json}
+    local mediapool_name=${1}
+    local volume_name=${2}
+
+    if [ $verbose -ge 1 ]; then
+	printf "${BLUE}media_change...${NO_COLOR}\n"
+    fi
+
+    if test ! -r ${mediapools_json}; then
+	if [ $verbose -ge 1 ]; then
+	    printf "${RED}Error:${MAGENTA} media-pool file ${GREEN}'%s'${MAGENTA} can't be opend!${NO_COLOR}\n" \
+		   "$mediapools_json"
+	fi
+	exit 1
+    fi
+
+    if [ ${#mediapool_name } -ge 1 ]; then
+	if [ ${#volume_name } -eq 0 ]; then
+	    get_lastwrite "${mediapool_name}"
+	fi
+	add_retensiondays_to_retensiondate "${mediapool_name}" "${volume_name}" "${retension_days}"
+	if test $? -eq 0; then
+	    if [ $verbose -ge 1 ]; then
+		date_string_to_iso "${volume_retensiondate}"
+		if [ $? -eq  0 ]; then
+		    volume_date=$(date --date="${date_iso}Z")
+		    printf "${MAGENTA}Updated RetensionDate date for ${GREEN}'%s'${MAGENTA} to: ${NO_COLOR}'%s'.\n" \
+			   "${volume_name}" "${volume_date}"
+		fi
+	    fi
+	fi
+	get_poolmember_next "${mediapool_name}"
+	if test $? -eq 0; then
+	    if [ $verbose -ge 1 ]; then
+		printf "${MAGENTA}MediaPool: ${GREEN}%s${NO_COLOR} (next tape: ${GREEN}%s${NO_COLOR})\n" \
+		       "${mediapool_name}" "${volume_name_next}"
+	    fi
+	fi
+    fi
+}
+
 mtx_exchange () {
     local changer_device=${changer_device:-$default_changer_device}
     #export changer_device
@@ -934,6 +976,20 @@ parse_params () {
 		set -- $params
 		shift $count
 		cmd=get-slot
+		;;
+	    --media-change)
+		shift 1
+		tape_params=${*}
+		tape_params="${tape_params%% -*}"
+		params=$*
+		set -- $tape_params
+		count=$#
+		test $count -lt 1 && usage
+		mediapool_name="$1"
+		test $count -ge 2 && volume_name="$2"
+		set -- $params
+		shift $count
+		cmd=media-change
 		;;
 	    --mount)
 		shift 1
@@ -1728,21 +1784,21 @@ Options:
                             (input attribute: <mediapool> <volume_name> <days>)
      --color                Enable colored output messages
      --get-lastwrite        extract LastWrite attribute from given Pool member (JSON-File)
-                            (input attribute: <mediapool> [volume_name])
+                            (input attribute: <mediapool> [<volume_name>])
                             without given volume_name, extract Pool member that was last witten to
      --get-mediapools       extract MediaPool names Pool configuration (JSON-File)
      --get-mediapolicy      extract MediaPolicy attribute from Pool configuration (JSON-File)
-                            (input attribute: <mediapool> [volume_name])
+                            (input attribute: <mediapool> [<volume_name>])
      --get-poolmember       extract VolumeName attribute from Pool configuration (JSON-File)
-                            (input attribute: <mediapool> [volume_name])
+                            (input attribute: <mediapool> [<volume_name>])
      --get-poolmember-next  extract VolumeName for next usable Pool member (JSON-File)
                             (input attribute: <mediapool> [volume_name])
      --get-retensiondate    extract RetensionDate attribute from Pool configuration (JSON-File)
-                            (input attribute: <mediapool> [volume_name])
+                            (input attribute: <mediapool> [<volume_name>])
      --get-retensiondays    extract DefaultRetensionDays attribute from Pool configuration (JSON-File)
                             (input attribute: <mediapool>)
      --get-slot             extract Slot attribute from Pool configuration (JSON-File)
-                            (input attribute: <mediapool> [volume_name])
+                            (input attribute: <mediapool> [<volume_name>])
      --ltfs-getattribute    report ltfs extended attribute for mounted tape
                             (input attribute: <ltfs_attribute>)
      --ltfs-format          format tape
@@ -1750,6 +1806,8 @@ Options:
      --ltfs-is-mounted      returns true, if ltfs tape is already mounted
      --ltfs-mount           mount a ltfs tape (returns true on success)
      --ltfs-umount          unmount a ltfs tape (returns true on success)
+     --media-change         Update RetensionDate for last written Pool-Tape and  und exchange tapes in slots
+                            (input attribute: <mediapool> [<volume_name>])
      --mtx-exchange         exchange tapes in slots
                             (input attribute: <slot_source> <slot_target>)
      --mtx-getlabel         report tape label/barcode for tape in drive
@@ -1948,6 +2006,19 @@ case $cmd in
 	if test $? -eq 0; then
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}LTFS Tape unmount: ${GREEN}true${NO_COLOR}\n"
+	    fi
+	fi
+	return $?
+	;;
+    media-change)
+	media_change $mediapool_name $volume_name
+	if [ $verbose -ge 1 ]; then
+	    if  [ ${#volume_name} -ge 1 ]; then
+		printf "${MAGENTA}Media change in pool: ${GREEN}%s${NO_COLOR} (Volume-Name: ${GREEN}%s${NO_COLOR})\n" \
+		       "${mediapool_name}" "${volume_name}"
+	    else
+		printf "${MAGENTA}Media change in pool: ${GREEN}%s${NO_COLOR}\n" \
+		       "${mediapool_name}"
 	    fi
 	fi
 	return $?
