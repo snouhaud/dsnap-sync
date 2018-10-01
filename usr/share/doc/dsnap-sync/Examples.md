@@ -85,7 +85,9 @@ is included in the package for your convenience.
 
     # dsnap-sync --config data2 --remote <fqdn/ip> --target /var/lib/snap-sync --batch --verbose
 
-## systemd
+## dsnap-sync handling
+
+### systemd
 
 `dsnap-sync` will structure all scheduling tasks while using systemd units.
 To perform a backup process for just a single snapper configuration at a
@@ -97,7 +99,7 @@ at /etc/systemd/system. Following call will reference this template:
 
 `systemd enable dsnap-sync@data2.service`
 
-### service unit: `dsnap-sync@.service
+#### service unit: `dsnap-sync@.service`
 
     [Unit]
     Description=dsnap-sync backup for target %i
@@ -114,7 +116,7 @@ at /etc/systemd/system. Following call will reference this template:
 			   --remote backup-host
 			   --batch
 
-### overriding service unit: `dsnap-sync@data2.service`
+#### overriding service unit: `dsnap-sync@data2.service`
 Please remember, that the template example encode a given target
 UUID and SUBVOLID. If you want the unit to serve individual parameter,
 you have to override the it like:
@@ -132,7 +134,7 @@ refine a new ExedStart= parameter with the intended.
 			   --remote my-backup-host
 			   --batch
 
-### timer unit: `dsnap-sync@.timer`
+#### timer unit: `dsnap-sync@.timer`
 
 Below we define a generic `dsnap-sync timer unit` that should be located
 at /etc/systemd/system.
@@ -151,6 +153,74 @@ at /etc/systemd/system.
 Following call will reference this template:
 
 `systemd enable dsnap-sync@data2.timer`
+
+
+## tape-admin
+
+## systemd
+
+The wrapper script will enable you, to act on a parameters given as
+arguments. If you want to address them regularily, you may define 
+corresponding timer and service untits.
+
+### service unit: `media-changer@.service`
+
+This generic service template will enable a media change for a given Pool.
+It should be located at /etc/systemd/system.
+The media change will update the retension date for the last written tape
+in that pool.
+
+	[Unit]
+	Description=dsnap-sync pool media change (Config %i)
+	OnFailure=email-on-failure@%n.service
+	
+	[Service]
+	Type=simple
+	ExecStart=/usr/bin/tape-admin --media-change %i --verbose=1
+	
+	[Install]
+	WantedBy=dsnap-sync.target
+
+A service instance acting on a given Pool will be activated with the 
+following command:
+
+`systemd enable media-changer@Pool1.service`
+
+### timer unit: `media-changer@.timer`
+
+Below we define a generic `media-changer timer unit` that should be located
+at /etc/systemd/system.
+
+	[Unit]
+	Description=dsnap-sync timer for media changer (config %i)
+	
+	[Timer]
+	OnCalendar=Sat *-*-* 08:00:00
+	#AccuracySec=8h
+	Persistent=true
+	
+	[Install]
+	WantedBy=timers.target
+
+Following call will reference this template for MediaPool `Pool1` and 
+activate a timer that will run the corresponding job every saturday 
+at 8:00am :
+
+`systemd enable now media-changer@Pool1.service`
+
+#### overriding timer unit: `media-changer@Pool1.service`
+Please remember, that the template example encode a default timer
+used for all MediaPools. If you want the unit to serve individual parameter,
+you have to override it like this:
+
+`systemd edit media-changer@Pool1.service`
+
+Define a Timer paragraph, clean out the parameter that should be overwritten
+and refine a new one with the intended attibute.
+
+	[Timer]
+	OnCalendar=
+	OnCalendar=Sat *-*-* 08:00:00
 
 ## snapper extensions
 
