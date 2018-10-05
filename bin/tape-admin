@@ -1216,10 +1216,10 @@ parse_params () {
 		shift $count
 		cmd=add-retensiondays
 		;;
-	    --dry-run|--dryrun)
-		dryrun=1
-		shift 1
-		;;
+	    #--dry-run|--dryrun)
+	    #	dryrun=1
+	    #	shift 1
+	    #	;;
 	    --get-lastwrite)
 		shift 1
 		pool_params=${*}
@@ -1454,14 +1454,14 @@ parse_params () {
 		shift $count
 		cmd=mtx-unload
 		;;
-	    -p|--port)
-		port=$2
-		shift 2
-		;;
-	    --remote)
-		remote=$2
-		shift 2
-		;;
+	    #-p|--port)
+	    #	port=$2
+	    #	shift 2
+	    #	;;
+	    #--remote)
+	    #	remote=$2
+	    #	shift 2
+	    #	;;
 	    --use-mtx)
 		use_mtx=1
 		shift 1
@@ -1551,10 +1551,10 @@ parse_params () {
 		esac
 		shift
 		;;
-	    --remote=*)
-		remote=${1#*=}
-		shift
-		;;
+	    #--remote=*)
+	    #	remote=${1#*=}
+	    #	shift
+	    #	;;
 	    --v=* | --verbose=*)
 		verbose=${1#*=}
 		shift
@@ -1574,14 +1574,14 @@ parse_params () {
 	esac
     done
 
-    if [ -z "$remote" ]; then
-	ssh=""
-    else
-	ssh="ssh $remote"
-	if [ ! -z "$port" ]; then
-	    ssh="$ssh -p $port"
-	fi
-    fi
+    #if [ -z "$remote" ]; then
+    #	ssh=""
+    #else
+    #	ssh="ssh $remote"
+    #	if [ ! -z "$port" ]; then
+    #	    ssh="$ssh -p $port"
+    #	fi
+    #fi
 
     if [ "$color" ]; then
 	# ascii color
@@ -1600,14 +1600,14 @@ parse_params () {
 	printf "  ltfs mount-point: '%s'\n" "$ltfs_mountpoint"
 	printf "MTX Settings\n"
 	printf "  def changer-name: '%s'\n" "$default_changer_device"
-	if [ ${#remote} -ge 1 ]; then
-	    printf "Remote Settings\n"
-	    printf "  remote host:      '%s'\n" "$remote"
-	    printf "  ssh options:      '%s'\n" "$ssh"
-	fi
+	#if [ ${#remote} -ge 1 ]; then
+	#    printf "Remote Settings\n"
+	#    printf "  remote host:      '%s'\n" "$remote"
+	#    printf "  ssh options:      '%s'\n" "$ssh"
+	#fi
 
 	if [ $verbose -ge 1 ]; then tape_options="verbose_level=$verbose"; fi
-	if [ $dryrun -eq 1 ]; then tape_options="${tape_options} dry-run=true"; fi
+	#if [ $dryrun -eq 1 ]; then tape_options="${tape_options} dry-run=true"; fi
 	if [ $color -eq 1 ]; then tape_options="${tape_options} color=true"; fi
 	if [ $use_mtx -eq 1 ]; then tape_options="${tape_options} use-mtx=true"; fi
 	printf "Options:            '%s'\n\n" "${tape_options}"
@@ -1932,10 +1932,6 @@ Options:
                             (input attribute: slot_source drive)
      --mount                make tape accessible for OS
                             (input attribute: <mediapool_name> [<volume_name>])
-      -r, --remote <host>   Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
-                            You should specify the remote machine's hostname or ip address. The 'root' user
-                            must be permitted to login on the remote machine.
-      -p, --port <port>     The remote port.
      --update-lastwrite     update LastWrite attribute for given TapeName in Pool (JSON-File)
                             (input attribute: <mediapool> <volume_name> [<YYYYMMDDHHMMSS> )
      --update-retensiondate update RetensionDate attribute for given TapeName in Pool (JSON-File)
@@ -1944,10 +1940,14 @@ Options:
                             (input attribute: <mediapool>)
      --use-mtx              use mtx loader handling. If not specified, all mtx commands will use
                             default device ($default_changer_device)
- -v, --verbose              Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
+     -v, --verbose          Be verbose on what's going on (min: --verbose=1, max: --verbose=3)
      --version		    show program version
 EOF
-    --dry-run               perform a trial run where no changes are made.
+     # -r, --remote <host>   Send the snapshot backup to a remote machine. The snapshot will be sent via ssh.
+     #                       You should specify the remote machine's hostname or ip address. The 'root' user
+     #                       must be permitted to login on the remote machine.
+     # -p, --port <port>     The remote port.
+     # --dry-run               perform a trial run where no changes are made.
 
     exit 0
 }
