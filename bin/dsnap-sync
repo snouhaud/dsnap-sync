@@ -347,7 +347,11 @@ get_media_infos () {
     # select the target LTFS tape
     if [ ${#mediapool_name} -gt 1 ] || [ ${#volume_name} -gt 1 ]; then
 	# read mounted LTFS structures
-	$ssh tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
+	if [ -z $remote ]; then
+	    tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
+	else
+	    $ssh tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
+	fi
 	if [ $? -eq 0 ]; then
 	    target_cmdline=$ltfs_mountpoint
 	    if  [ ${#volume_name} -eq 0 ]; then
@@ -1521,6 +1525,11 @@ run_backup () {
 		fi
 		;;
 	esac
+	if [ $? -gt 0 ]; then
+	    # go for next configuration
+	    i=$(($i+1))
+	    continue
+	fi
 
 	if [ $dryrun -eq 0 ]; then
 	    if [ "$interactive" -eq 1  ]; then
@@ -2724,9 +2733,8 @@ verify_snapper_structure () {
 	    fi
 	    # strip last dir from backup_root
 	    base_path=${backup_root%/*}
-	    if [ ${#base_path} -ge 1 }; then
+	    if [ ${#base_path} -ge 1 ]; then
 		if [ $dryrun -eq 0 ]; then
-		    $($ssh mkdir --mode=0700 --parents $base_path)
 		    if [ $verbose -ge 3 ]; then
 			if [ -z $remote_host ]; then
 			    printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR}...\n" \
@@ -2735,6 +2743,17 @@ verify_snapper_structure () {
 			    printf "${MAGENTA}Create${NO_COLOR} new backup-path ${GREEN}'%s'${NO_COLOR} on ${MAGENTA}remote host ${GREEN}'%s'${NO_COLOR=} ...\n" \
 				   "$backup_root" "$remote_host"
 			fi
+		    fi
+		    ret=$(eval $ssh mkdir --mode=0700 --parents $base_path)
+		    if [ $? -eq 1 ]; then
+			if [ -z "$remote" ]; then
+			    printf "${RED}Error: Can't create${NO_COLOR} new snapper capable BTRFS ${MAGENTA}subvolume ${GREEN}'%s'${NO_COLOR} ...\n"  \
+				   "$backup_root"
+			else
+			    printf "${RED}Error: Can't create${NO_COLOR} new snapper capable BTRFS ${MAGENTA}subvolume ${GREEN}'%s'${NO_COLOR} on ${MAGENTA}remote host ${GREEN}'%s'${NO_COLOR} ...\n" \
+				   "$backup_root" "$remote_host"
+			fi
+			return 1
 		    fi
 		else
 		    if [ -z $remote_host ]; then
@@ -2900,7 +2919,8 @@ verify_snapper_structure () {
 	    if [ $? -ne 0 ]; then
 		printf "${RED}Cancel path snapshot creation${NO_COLOR}: Can't create path '%s' to store target snapshot.\n" \
 		       "$backup_root/$snapper_snapshots/$snapper_id"
-		die "Can't create snapshot dir on target."
+		#die "Can't create snapshot dir on target."
+		return 1
 	    fi
 	else
 	    cmd="$ssh stat --format %i $backup_root/$snapper_snapshots/$snapper_id/$snapper_snapshot_name 2>/dev/null"
@@ -2917,7 +2937,8 @@ verify_snapper_structure () {
 
 		# cleanup generated snapper entry
 		check_snapper_failed_ids $selected_config $batch
-		die "Can't backup to existing snapshot-id ($snapper_id)!"
+		#die "Can't backup to existing snapshot-id ($snapper_id)!"
+		return 1
 	    fi
 	fi
     else
