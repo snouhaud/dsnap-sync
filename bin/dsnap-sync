@@ -511,7 +511,8 @@ get_snapper_target_backupdir () {
 		       "$backupdir"
 		printf "${RED}TODO: ${NO_COLOR}Need to adapt ${GREEN}SUBVOLUME${NO_COLOR} for existing ${GREEN}target-config${NO_COLOR}, to reflect the new backupdir.\n"
 	    fi
-	    die "Changing the backupdir for an already existing target-config is not supported yet.\n"
+	    printf "${RED}Error: ${MAGENTA}Changing the backupdir for an already existing target-config is not supported yet${NO_COLOR}\n"
+	    return 1
 	elif [ "$backupdir_cmdline" != 'none' ] && [ -z "$backupdir" ] ; then
 	    backupdir=$backupdir_cmdline
 	fi
@@ -583,8 +584,10 @@ get_disk_infos () {
     fi
 
     # we need at least one target disk
-    if [ ${#disk_targets} -eq 0 ]; then die "no suitable target disk found"; fi
-
+    if [ ${#disk_targets} -eq 0 ]; then
+	printf "${RED}Error: ${MAGENTA}No suitable target disk found${NO_COLOR}"
+	return 1
+    fi
     # Posix Shells do not support Array. Therefore using ...
     # Pseudo-Arrays (assumption: equal number of members)
     # Pseudo-Array: disk_uuid_$i
@@ -667,7 +670,8 @@ get_tape_infos () {
 
     # we need at least one target disk
     if [ ${#tape_targets} -eq 0 ]; then
-	printf "no suitable LTFS tape mounted yet\n"
+	printf "${RED}Error: ${MAGENTA}No suitable LTFS tape mounted yet${NO_COLOR}\n"
+	return 1
     fi
 
     # Posix Shells do not support Array. Therefore using ...
@@ -1443,7 +1447,10 @@ run_backup () {
 	if [ -f "/etc/snapper/configs/$selected_config" ]; then
 	    . /etc/snapper/configs/$selected_config
 	else
-	    die "Selected snapper configuration '$selected_config' does not exist."
+	    printf "${RED}Error: ${MAGENTA}Selected snapper configuration ${GREEN}'$selected_config'${MAGENTA} does not exist${NO_COLOR}\n"
+	    # go for next configuration
+	    i=$(($i+1))
+	    continue
 	fi
 
 	cont_backup=$(echo \$snapper_activate_$i)
@@ -1634,11 +1641,18 @@ run_backup () {
 		 ;;
 	esac
 	if [ "$dryrun" -eq 0 ]; then
-	    if [ "$snapper_source_sync_id" -eq 0 ] || [ "$snapper_target_sync_id" -eq 0 ] || [ "$backup_mode" = "full" ]] ; then
-	        # send full snapshot to target
-	        if [ $verbose -ge 2 ]; then
-	            printf "${MAGENTA}Sending ${GREEN}snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
-			   "$selected_config" "$snapper_source_id" "$snapper_source_snapshot_size"
+	    if [ "$snapper_source_sync_id" -eq 0 ] \
+		   || [ "$snapper_target_sync_id" -eq 0 ] \
+		   || [ "$backup_mode" = "full" ] ; then
+		# send full snapshot to target
+		if [ $verbose -ge 2 ]; then
+		    if [ $snapper_source_snapshot_size -gt 0 ]; then
+			printf "${MAGENTA}Sending ${GREEN}snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
+			       "$selected_config" "$snapper_source_id" "$snapper_source_snapshot_size"
+		    else
+			printf "${MAGENTA}Sending ${GREEN}snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s')${NO_COLOR} ...\n" \
+			       "$selected_config"
+		    fi
 	        fi
 		# the actual data sync to the target
 		# this may take a while, depending on datasize and line-speed
@@ -1651,7 +1665,6 @@ run_backup () {
 		    # go for next configuration
 		    i=$(($i+1))
 		    continue
-		    #die "btrfs pipe error."
 		fi
 	    else
 	        # source holds synced snapshots
@@ -1690,7 +1703,7 @@ run_backup () {
 				snapper_source_sync_id=$snapper_sync_id
 				snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/$snapper_snapshot_name
 		            else
-				printf "${RED}Error: ${MAGENTA}No common sync id found. Aborting backup for config ${GREEN}'%s'${NOCOLOR}\n"
+				printf "${RED}Error: ${MAGENTA}No common sync id found. Aborting backup for config ${GREEN}'%s'${NO_COLOR}\n"
 				# go for next configuration
 				i=$(($i+1))
 				continue
@@ -1770,15 +1783,17 @@ run_backup () {
 	        else
 		    # is this clause possible?
 		    if [ $verbose -ge 3 ]; then
-		        printf "${RED}Error: ${NO_COLOR}No commen sync snapshot ${GREEN}'%s'${NO_COLOR} on ${GREEN}source${NO_COLOR} to sync metadata ...\n" \
+		        printf "${RED}Error: ${MAGENTA}No commen sync snapshot ${GREEN}'%s'${MAGENTA} on ${GREEN}source${MAGENTA} to sync metadata ...${NO_COLOR} \n" \
 			       "$snapper_common_sync_snapshot"
-	                die "btrfs send/recieve error."
+			# go for next configuration
+			i=$(($i+1))
+			continue
+
 		    fi
 	        fi
 	    fi
 	else
 	    printf "${MAGENTA}dryrun${NO_COLOR}: Would run btrfs send / btrfs receive pipe\n"
-	    #printf "dryrun: '%s'\n" "$cmd"
 	fi
 
 	# send the snapper info metadata
@@ -1806,7 +1821,7 @@ run_backup () {
 	run_cleanup ${selected_config}
 
 	if [ $verbose -ge 1 ]; then
-	printf "${MAGENTA}Backup complete:${NOCOLOR} id=${GREEN}'%s'${NO_COLOR}, config=${GREEN}'%s'${NO_COLOR}\n" \
+	printf "${MAGENTA}Backup complete:${NO_COLOR} id=${GREEN}'%s'${NO_COLOR}, config=${GREEN}'%s'${NO_COLOR}\n" \
 	       "$snapper_source_id" "$selected_config"
 	fi
 
@@ -1849,7 +1864,8 @@ run_finalize () {
     if [ -f "/etc/snapper/configs/$selected_config" ]; then
         . /etc/snapper/configs/$selected_config
     else
-        die "Selected snapper configuration '$selected_config' does not exist."
+        printf "${RED}Error: ${MAGENTA}Selected snapper configuration ${GREEN}'$selected_config'${MAGENTA} does not exist${NO_COLOR}"
+	return 1
     fi
 
     cont_backup=$(echo \$snapper_activate_$i)
@@ -2626,9 +2642,9 @@ verify_archive_structure () {
 	    ret=$(eval $ssh mkdir --mode=0700 \
 		   $backup_root/$snapper_id)
 	    if [ $? -ne 0 ]; then
-		printf "${RED}Cancel path snapshot creation${NO_COLOR}: Can't create path '%s' to store target snapshot.\n" \
+		printf "${RED}ERROR: ${MAGENTA}Cancel path snapshot creation: Can't create path ${GREEN}'%s'${MAGENTA} to store target snapshot${NO_COLOR}\n" \
 		       "$backup_root/$snapper_id"
-		die "Can't create snapshot dir on target."
+		return 1
 	    fi
 	fi
     else
@@ -2680,7 +2696,8 @@ verify_snapper_config () {
 	    printf "${MAGENTA}snapper --config ${GREEN}%s${MAGENTA} create-config --template ${GREEN}%s${MAGENTA} <btrfs-subvolume-path>${NO_COLOR}\n" \
 		   "$selected_config" "$snapper_subvolume_template"
 	fi
-	die "Can't backup snapper configuration '$selected_config' that does not exist."
+	printf "${RED}Error: ${MAGENTA}Can't backup selected snapper configuration ${GREEN}'$selected_config'${MAGENTA}, that does not exist${NO_COLOR}\n"
+	return 1
     else
 	. /etc/snapper/configs/$selected_config
 	if [ "$SUBVOLUME" = "/" ]; then
@@ -2786,21 +2803,30 @@ verify_snapper_structure () {
 	    # verify that we can use the correct snapper template
 	    cmd="$ssh stat --format %i $SNAPPER_TEMPLATE_DIR/$snapper_subvolume_template 2>/dev/null"
 	    if [ -z $(eval $cmd) ]; then
-		printf "${RED}Missing a snapper template %s${NO_COLOR} to configure the snapper subvolume %s in %s on %s.\n" \
+		printf "${RED}Error: ${MAGENTA}Missing a snapper template %s${MAGENTA} to configure the snapper subvolume ${GREEN}%s${MAGENTA} in ${GREEN}%s${MAGENTA} on ${GREEN}%s${NO_COLOR}\n" \
 		       "$snapper_subvolume_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
-		printf "Did you miss to install the dsnap-sync's default snapper template on %s?\n" \
+		printf "${RED}Error: ${NO_COLOR}Did you miss to install the dsnap-sync's default snapper template on %s?\n" \
 		       "$remote"
-		die "snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" \
-		    "$snapper_subvolume_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
+		return 1
+		#die "snapper template %s to configure the snapper subvolume %s is missing in %s on %s.\n" \
+		#    "$snapper_subvolume_template" "$snapper_config" "$SNAPPER_TEMPLATE_DIR" "$remote_host"
 	    fi
             # create the non existing remote BTRFS subvolume for given config
 	    cmd="$ssh btrfs subvolume create $backup_root 1>/dev/null"
-	    $(eval $cmd) || die "Creation of BTRFS subvolume (backup-root) %s:%s failed.\n" \
-				"$remote_host" "$backup_root"
-	    cmd="$ssh chmod 0700 $backup_root"
-            $(eval $cmd) || die "Changing the directory mode for %s on %s failed.\n" \
-				"$backup_root" "$remote_host"
-
+	    ret=$(eval $cmd)
+	    if [ $ret -eq 1 ]; then
+		printf "${RED}Error: ${MAGENTA}Creation of BTRFS subvolume (backup-root) ${GREEN}%s:%s${MAGENTA} failed.${NO_COLOR}\n" \
+		       "$remote_host" "$backup_root"
+		return 1
+	    else
+		cmd="$ssh chmod 0700 $backup_root"
+		ret=$(eval $cmd)
+		if [ $ret -eq 1 ]; then
+		    printf "${RED}Error: ${MAGENTA}Changing directory-mode for BTRFS subvolume (backup-root) ${GREEN}%s:%s${MAGENTA} failed.${NO_COLOR}\n" \
+			   "$remote_host" "$backup_root"
+		    return 1
+		fi
+	    fi
 	    # create the non existing remote BTRFS subvolume for given snapshot
 	    #cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshot 1>/dev/null"
 	    #$($cmd) || \
@@ -2815,8 +2841,9 @@ verify_snapper_structure () {
 	fi
     else
 	if [ $ret -ne 256 ]; then
-	    die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" \
+	    printf "${RED}Error: ${GREEN}%s ${MAGENTA}needs to be a BTRFS subvolume. But given ${GREEN}%s ${MAGENTA}is just a directory.${NO_COLOR}\n" \
 		"$snapper_config" "$backup_root"
+	    return 1
 	fi
 	if [ $verbose -ge 3 ]; then
 	    printf "${RED}TODO:${NO_COLOR} check and adapt SUBVOLUME in given config '%s', since mount path might have changed meanwhile\n" "$snapper_config"
@@ -2846,12 +2873,13 @@ verify_snapper_structure () {
        	    $(eval $cmd)
 	    if [ $? -ne 0 ]; then
 		if [ $remote ]; then
-		    die "Creation of snapper capable config %s on %s failed.\n" \
-			"$backup_root" "$remote_host"
+		    printf "${RED}Error: ${MAGENTA}Creation of snapper capable config ${GREEN}%s${MAGENTA} on ${GREEN}%s${MAGENTA} failed${NO_COLOR}\n" \
+			   "$backup_root" "$remote_host"
 		else
-		    die "Creation of snapper capable config %s failed.\n" \
+		    printf "${RED}Error: ${MAGENTA}Creation of snapper capable config ${GREEN}%s${MAGENTA} failed${NO_COLOR}\n" \
 			"$backup_root"
 		fi
+		return 1
 	    fi
     	else
        	    # WIP:
@@ -2884,13 +2912,15 @@ verify_snapper_structure () {
 		cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshots 2>/dev/null"
        		ret=$(eval $cmd)
 		if [ $? -ne 0 ] && [ $ret -ne 256 ]; then
-		    die "Creation of snapper subvolume %s failed.\n" \
-			"$backup_root/$snapper_snapshots"
+		    printf "${RED}Error: ${MAGENTA}Creation of snapper subvolume ${GREEN}%s${MAGENTA} failed${NO_COLOR}\n" \
+			   "$backup_root/$snapper_snapshots"
+		    return 1
 		fi
 	    else
 		if [ $ret -ne 256 ]; then
-		    die "%s needs to be a BTRFS subvolume. But given %s is just a directory.\n" \
+		    printf "${RED}Error: ${GREEN}%s ${MAGENTA}needs to be a BTRFS subvolume. But given ${GREEN}%s${MAGENTA} is just a directory${NO_COLOR}\n" \
 			"$snapper_config" "$backup_root"
+		    return 1
 		fi
 	    fi
 	fi
@@ -2919,7 +2949,6 @@ verify_snapper_structure () {
 	    if [ $? -ne 0 ]; then
 		printf "${RED}Cancel path snapshot creation${NO_COLOR}: Can't create path '%s' to store target snapshot.\n" \
 		       "$backup_root/$snapper_snapshots/$snapper_id"
-		#die "Can't create snapshot dir on target."
 		return 1
 	    fi
 	else
@@ -2937,7 +2966,6 @@ verify_snapper_structure () {
 
 		# cleanup generated snapper entry
 		check_snapper_failed_ids $selected_config $batch
-		#die "Can't backup to existing snapshot-id ($snapper_id)!"
 		return 1
 	    fi
 	fi
