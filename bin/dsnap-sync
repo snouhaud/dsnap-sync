@@ -3009,16 +3009,32 @@ if [ -d $TMPDIR ]; then
     #printf "${RED}TODO: ${NO_COLOR}Will remove $TMPDIR}"
 fi
 
-printf "${BLUE}Backups done!${NO_COLOR}\n"
+printf "${BLUE}Backup run completed!${NO_COLOR}\n"
 
 # close the read file descriptor
 #exec 3>&-
 exec 4>&-
 
 if [ $donotify -gt 0 ]; then
-    if [ "$uuid_cmdline" != "none" ]; then
-	notify_info "Finished" "Backups to $uuid_cmdline complete!"
+    if [ "$target_cmdline" != "none" ]; then
+	if [ -z "$remote" ]; then
+	    notify_info "Finished" "Backup run to target '$target_cmdline' completed!"
+	else
+	    notify_info "Finished" "Backup run to remote '$remote' target '$target_cmdline' completed!"
+	fi
+    elif [ "$uuid_cmdline" != "none" ]; then
+	if [ -z "$remote" ]; then
+	    notify_info "Finished" "Backup run to uuid '$uuid_cmdline' completed!"
+	else
+	    notify_info "Finished" "Backup run to remote '$remote' uuid '$uuid_cmdline' completed!"
+	fi
     else
-	notify_info "Finished" "Backups complete!"
-    fi
+	if [ -z "$remote" ]; then
+	    notify_info "Finished" "Backup run to target '$selected_target' completed!"
+	else
+	    notify_info "Finished" "Backup run to remote '$remote' target '$selected_target' completed!"
+	fi
+	fi
 fi
+
+return 0
