@@ -68,6 +68,7 @@ disk_uuid_match_count=0
 #disk_target_match_count=0
 disk_subvolid_match_count=0
 disk_uuid_match=''
+error_count=0
 ltfs_mountpoint="/media/tape"
 target_count=0
 target_match_count=0
@@ -1533,12 +1534,14 @@ run_backup () {
 		;;
 	esac
 	if [ $? -gt 0 ]; then
+	    error_count=$(($error_count+1))
 	    # go for next configuration
 	    i=$(($i+1))
 	    continue
 	fi
 
 	if [ $dryrun -eq 0 ]; then
+	    snapper_source_snapshot_size=0
 	    if [ "$interactive" -eq 1  ]; then
 		if [ $verbose -ge 2 ]; then
 		    printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
@@ -1662,6 +1665,7 @@ run_backup () {
 		$(eval $cmd)
 		if [ "$?" -gt 0 ]; then
 		    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat <4)"
+		    error_count=$(($error_count+1))
 		    # go for next configuration
 		    i=$(($i+1))
 		    continue
@@ -1704,6 +1708,7 @@ run_backup () {
 				snapper_source_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/$snapper_snapshot_name
 		            else
 				printf "${RED}Error: ${MAGENTA}No common sync id found. Aborting backup for config ${GREEN}'%s'${NO_COLOR}\n"
+				error_count=$(($error_count+1))
 				# go for next configuration
 				i=$(($i+1))
 				continue
@@ -1785,6 +1790,7 @@ run_backup () {
 		    if [ $verbose -ge 3 ]; then
 		        printf "${RED}Error: ${MAGENTA}No commen sync snapshot ${GREEN}'%s'${MAGENTA} on ${GREEN}source${MAGENTA} to sync metadata ...${NO_COLOR} \n" \
 			       "$snapper_common_sync_snapshot"
+			error_count=$(($error_count+1))
 			# go for next configuration
 			i=$(($i+1))
 			continue
@@ -3037,4 +3043,6 @@ if [ $donotify -gt 0 ]; then
 	fi
 fi
 
-return 0
+if [ $error_count -ge 1 ]; then
+    return 1
+fi
