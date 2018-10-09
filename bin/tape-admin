@@ -716,6 +716,12 @@ ltfs_umount () {
 		       "$ltfs_mountpoint"
 	    fi
 	    return 0
+	elif [ $? -eq 32 ]; then
+	    if [ $verbose -ge 2 ]; then
+		printf "${RED}Error: ${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} is in use!${NO_COLOR}\n" \
+		       "$ltfs_mountpoint"
+	    fi
+	    return 1
 	else
 	    return 1
 	fi
