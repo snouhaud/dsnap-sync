@@ -689,6 +689,7 @@ ltfs_reformat () {
 	    ltfs_format ${volume_name_active} ${volume_serial}
 	else
 	    ltfs_wipe
+	    ltfs_umount
 	    ltfs_format ${volume_name_active} ${volume_serial}
 	fi
         ltfs_mount
@@ -709,22 +710,24 @@ ltfs_umount () {
 	    printf "${MAGENTA}unmounting LTFS tape ${GREEN}'%s'${NO_COLOR}.\n" \
 		   "$ltfs_mountpoint"
 	fi
-	ret=$(umount $ltfs_mountpoint 2>/dev/null)
-	if [ $? -eq 0 ]; then
-	    if [ $verbose -ge 2 ]; then
-		printf "${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} unmounted.${NO_COLOR}\n" \
-		       "$ltfs_mountpoint"
-	    fi
-	    return 0
-	elif [ $? -eq 32 ]; then
-	    if [ $verbose -ge 2 ]; then
-		printf "${RED}Error: ${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} is in use!${NO_COLOR}\n" \
-		       "$ltfs_mountpoint"
-	    fi
-	    return 1
-	else
-	    return 1
-	fi
+	umount $ltfs_mountpoint 2>/dev/null
+	ret=$?
+	case $ret in
+	    0)
+		if [ $verbose -ge 2 ]; then
+		    printf "${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} unmounted.${NO_COLOR}\n" \
+			   "$ltfs_mountpoint"
+		fi
+		return 0
+		;;
+	    *)
+		if [ $verbose -ge 2 ]; then
+		    printf "${RED}Error: '%s' ${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} is in use!${NO_COLOR}\n" \
+			   "$ret" "$ltfs_mountpoint"
+		fi
+		return 1
+		;;
+	esac
     fi
 }
 
@@ -1975,67 +1978,73 @@ parse_params $@
 case $cmd in
     add-retensiondays)
 	add_retensiondays_to_retensiondate "${mediapool_name}" "${volume_name}" "${retension_days}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    if [ $verbose -ge 1 ]; then
+		printf "${RED}Error: ${MAGENTA}No RetensionDate for ${GREEN}'%s'${MAGENTA} in media-pool ${GREEN}%s${NO_COLOR}\n" \
+		       "${mediapool_name}" "${volume_name}"
+	    fi
+	    return 1
+	else
 	    date_string_to_iso "${volume_retensiondate}"
 	    if [ $? -eq  0 ]; then
 		volume_date=$(date --date="${date_iso}Z")
 		printf "${MAGENTA}New RetensionDate date for ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}'%s'.\n" \
 		       "${volume_name}" "${volume_date}"
 	    fi
-	else
-	    if [ $verbose -ge 1 ]; then
-		printf "${RED}Error: ${MAGENTA}No RetensionDate for ${GREEN}'%s'${MAGENTA} in media-pool ${GREEN}%s${NO_COLOR}\n" \
-		       "${mediapool_name}" "${volume_name}"
-	    fi
 	fi
-	return $?
     	;;
     get-mediapolicy)
 	get_mediapolicy "${mediapool_name}" "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}MediaPolicy for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR}'%s'.\n" \
 		       "${volume_name}" "${volume_mediapolicy}"
 	    fi
 	fi
-	return $?
     	;;
     get-mediapool-name)
 	get_mediapool_name "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}MediaPool name: ${GREEN}'%s'${NO_COLOR}\n" \
 		       "${mediapool_name}"
 	    fi
 	fi
-	return $?
     	;;
     get-mediapools)
 	get_mediapool_names
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}MediaPool names: ${GREEN}'%s'${NO_COLOR}\n" \
 		       "${mediapool_names}"
 	    fi
 	fi
-	return $?
     	;;
     get-poolmember)
 	valid_member=0
 	get_poolmember "${mediapool_name}" "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}Volume-Name ${GREEN}'%s'${MAGENTA} is a valid mediapool member.${NO_COLOR}\n" \
 		       "${volume_name}"
 	    fi
 	    valid_member=1
 	fi
-	return $?
     	;;
     get-lastwrite)
 	valid_member=0
 	get_lastwrite "${mediapool_name}" "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		date_string_to_iso ${volume_lastwrite}
 		if [ $? -eq 0 ]; then
@@ -2044,43 +2053,42 @@ case $cmd in
 			   "${volume_name}" "${mediapool_name}" "${volume_date}"
 		fi
 	    fi
-	else
-	    return 1
 	fi
     	;;
     get-poolmember-next)
 	valid_member=0
 	get_poolmember_next "${mediapool_name}" "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}Next Volume-Name from media-pool ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
 		       "${mediapool_name}" "${volume_name_next}"
 	    fi
 	fi
-	return $?
     	;;
     get-retensiondate)
 	get_retensiondate "${mediapool_name}" "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    date_string_to_iso "${volume_retensiondate}"
 	    volume_date=$(date --date="${date_iso}Z")
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}RetensionDate for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
 		       "${volume_name}" "${volume_date}"
 	    fi
-	else
-	    return 1
 	fi
     	;;
     get-mediapool-retensiondays)
 	get_mediapool_retensiondays "${mediapool_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}Default retension days for tapes in mediapool ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
 		       "${mediapool_name}" "${mediapool_defaultretensiondays}"
 	    fi
-	else
-	    return 1
 	fi
     	;;
     get-slot)
@@ -2095,74 +2103,94 @@ case $cmd in
     	;;
     ltfs-format)
 	ltfs_format "${volume_name}" "${tape_id}"
+	if test $? -gt 0; then
+	    return 1
+	fi
 	;;
     ltfs-getattribute)
 	ltfs_is_mounted
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    ltfs_get_attribute "${ltfs_attribute_name}"
-	    if test $? -eq 0; then
+	    if test $? -gt 0; then
+		return 1
+	    else
 		if [ $verbose -ge 1 ]; then
 		    printf "${MAGENTA}LTFS attribute ${GREEN}'%s'${MAGENTA} is: ${GREEN}'%s'${NO_COLOR}\n" \
 			   "${ltfs_attribute_name}" "${ltfs_attribute_value}"
 		fi
 	    fi
 	fi
-	return $?
 	;;
     ltfs-is-mounted)
 	ltfs_is_mounted
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}LTFS Tape is-mounted: ${GREEN}true${NO_COLOR}\n"
 	    fi
 	fi
-	return $?
 	;;
     ltfs-mount)
 	ltfs_mount
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}LTFS Tape mount: ${GREEN}true${NO_COLOR}\n"
 	    fi
 	fi
-	return $?
        ;;
     ltfs-reformat)
 	ltfs_reformat "${volume_name}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}LTFS Tape reformat: ${GREEN}%s${NO_COLOR}\n" \
 		       "${volume_name}"
 	    fi
 	fi
-	return $?
 	;;
     ltfs-umount)
 	ltfs_umount
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}LTFS Tape unmount: ${GREEN}true${NO_COLOR}\n"
 	    fi
 	fi
-	return $?
 	;;
     media-change)
 	media_change $mediapool_name $volume_name
-	if [ $verbose -ge 1 ]; then
-	    if  [ ${#volume_name} -ge 1 ]; then
-		printf "${MAGENTA}Media changed in pool: ${GREEN}%s${NO_COLOR} (Volume-Name: ${GREEN}%s${NO_COLOR})\n" \
-		       "${mediapool_name}" "${volume_name}"
-	    else
-		printf "${MAGENTA}Media changed in pool: ${GREEN}%s${NO_COLOR}\n" \
-		       "${mediapool_name}"
+	if test $? -gt 0; then
+	    return 1
+	else
+	    if [ $verbose -ge 1 ]; then
+		if  [ ${#volume_name} -ge 1 ]; then
+		    printf "${MAGENTA}Media changed in pool: ${GREEN}%s${NO_COLOR} (Volume-Name: ${GREEN}%s${NO_COLOR})\n" \
+			   "${mediapool_name}" "${volume_name}"
+		else
+		    printf "${MAGENTA}Media changed in pool: ${GREEN}%s${NO_COLOR}\n" \
+			   "${mediapool_name}"
+		fi
 	    fi
 	fi
-	return $?
 	;;
     mount)
-	mount_tape $mediapool_name $volume_name
-	return $?
-	;;
+        mount_tape "${mediapool_name}" "${volume_name}"
+	if test $? -gt 0; then
+	    return 1
+	else
+	    if [ $verbose -ge 1 ]; then
+		printf "${MAGENTA}Tape ${GREEN}'%s'${MAGENTA} for ${GREEN}'%s'${MAGENTA} mounted${NO_COLOR}\n" \
+		       "${volume_name}" "${mediapool_name}"
+	    fi
+	fi
+    	;;
     mtx-exchange)
 	mtx_exchange "${slot_source}" "${slot_target}"
 	return $?
@@ -2191,19 +2219,11 @@ case $cmd in
 	mtx_unload "${slot_source}" "${drive}"
 	return $?
 	;;
-    mount)
-        mount_tape "${mediapool_name}" "${volume_name}"
-	if test $? -eq 0; then
-	    if [ $verbose -ge 1 ]; then
-		printf "${MAGENTA}Tape ${GREEN}'%s'${MAGENTA} for ${GREEN}'%s'${MAGENTA} mounted${NO_COLOR}\n" \
-		       "${volume_name}" "${mediapool_name}"
-	    fi
-	fi
-	return $?
-    	;;
     update-lastwrite)
 	update_lastwrite "${mediapool_name}" "${volume_name}" "${date_string}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		date_string_to_iso "${volume_lastwrite}"
 		if [ $? -eq  0 ]; then
@@ -2213,21 +2233,23 @@ case $cmd in
 		fi
 	    fi
 	fi
-	return $?
     	;;
     update-mediapool-retensiondays)
 	update_mediapool_retensiondays "${mediapool_name}" "${mediapool_defaultretensiondays}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}New DefaultRetensionDays attribute for ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}'%s'.\n" \
 		       "${mediapool_name}" "${mediapool_defaultretensiondays}"
 	    fi
 	fi
-	return $?
     	;;
     update-retensiondate)
 	update_retensiondate "${mediapool_name}" "${volume_name}" "${date_string}"
-	if test $? -eq 0; then
+	if test $? -gt 0; then
+	    return 1
+	else
 	    if [ $verbose -ge 1 ]; then
 		date_string_to_iso "${volume_retensiondate}"
 		if [ $? -eq  0 ]; then
@@ -2237,6 +2259,5 @@ case $cmd in
 		fi
 	    fi
 	fi
-	return $?
     	;;
 esac
