@@ -362,9 +362,14 @@ get_media_infos () {
 	    fi
 	    get_tape_infos
 	else
-	    printf "${RED}Error: ${NO_COLOR}Can't mount volume ${GREEN}'%s'${NO_COLOR} from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
+	    if [ ${#volume_name} -gt 0 ]; then
+		printf "${RED}Error: ${NO_COLOR}Can't use volume ${GREEN}'%s'${NO_COLOR} from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
 		   "$volume_name" "$mediapool_name"
-	    die "Can't mount valid tape."
+	    else
+		printf "${RED}Error: ${NO_COLOR}Can't use valid volume from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$mediapool_name"
+	    fi
+	    die "Can't use valid tape."
 	fi
     else
 	# read mounted BTRFS structures
@@ -1773,11 +1778,20 @@ run_backup () {
 		    case $ret in
 			0)
 			    ;;
+			1)
+			    # empty stream, no changes
+			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'1'${NO_COLOR}\n"
+			    printf "${MAGENTA}  -> %s${NO_COLOR}\n" "$(cat <4)"
+			    run_cleanup ${selected_config}
+			    # go for next configuration
+			    i=$(($i+1))
+			    continue
+			    ;;
 			127)
 			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'127'${NO_COLOR}\n"
 			    ;;
 			*)
-			    printf "${RED}btfs pipe ERROR: '%s'!\n" "$ret"
+			    printf "${RED}btfs pipe ERROR: '%s'\n" "$ret"
 			    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat <4)"
 			    run_cleanup ${selected_config}
 			    # go for next configuration
@@ -1990,35 +2004,37 @@ run_finalize () {
 	    fi
 	    ret=$(eval "$cmd")
 	    if [ $? -eq 0 ]; then
-		if [ $ret -eq $snapper_target_id ]; then
-		    # got snapshot as $snapper_target_id
-		    if [ $verbose -ge 3 ]; then
-			printf "${MAGENTA}Found${NO_COLOR} snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR}\n" \
-			       "$snapper_target_id" "$snapper_target_config"
+		if [ ${#ret} -gt 1 ]; then
+		    if [ $ret -eq $snapper_target_id ]; then
+			# got snapshot as $snapper_target_id
+			if [ $verbose -ge 3 ]; then
+			    printf "${MAGENTA}Found${NO_COLOR} snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR}\n" \
+				   "$snapper_target_id" "$snapper_target_config"
+			fi
+ 			if [ $verbose -ge 3 ]; then
+			    printf "${MAGENTA}Tagging metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
+				   "$snapper_target_id" "$snapper_target_config"
+			    #printf "calling: '%s'\n" "$($cmd)"
+			fi
+			# call command (respect needed quotes)
+			if [ $remote ]; then
+			    ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
+			    	       --description \\\'$snap_description_finished\\\' \
+			    	       --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
+			    	       --cleanup-algorithm \'timeline\' \
+			    	       \'$snapper_target_id\')
+			else
+			    ret=$(eval snapper --config $snapper_target_config modify \
+			    	       --description "$snap_description_finished" \
+				       --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
+				       --cleanup-algorithm "timeline" \
+			     	       $snapper_target_id)
+			fi
+			if [ $verbose -ge 3 ]; then
+			    printf "return: '%s'\n" "$ret"
+			fi
+			break
 		    fi
- 		    if [ $verbose -ge 3 ]; then
-			printf "${MAGENTA}Tagging metadata${NO_COLOR} for snapper id ${GREEN}'%s'${NO_COLOR} on target for configuration ${GREEN}'%s'${NO_COLOR} ...\n" \
-			       "$snapper_target_id" "$snapper_target_config"
-			#printf "calling: '%s'\n" "$($cmd)"
-		    fi
-		    # call command (respect needed quotes)
-		    if [ $remote ]; then
-			ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
-			    	   --description \\\'$snap_description_finished\\\' \
-			    	   --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
-			    	   --cleanup-algorithm \'timeline\' \
-			    	   \'$snapper_target_id\')
-		    else
-			ret=$(eval snapper --config $snapper_target_config modify \
-			    	   --description "$snap_description_finished" \
-				   --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
-				   --cleanup-algorithm "timeline" \
-			     	   $snapper_target_id)
-		    fi
-		    if [ $verbose -ge 3 ]; then
-			printf "return: '%s'\n" "$ret"
-		    fi
-		    break
 		fi
 	    fi
 	    if [ $verbose -ge 3 ]; then
