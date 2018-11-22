@@ -560,7 +560,7 @@ ltfs_format () {
     fi
 
     make_err_file
-    ${MKLTFS} --device=$ltfs_devname --volume-name=${volume_name} --tape-serial=${volume_serial} 2>${ERRFILE}
+    ${MKLTFS} --device=$ltfs_devname --volume-name=${volume_name} --tape-serial=${volume_serial} --force 2>${ERRFILE}
     RET=$?
     rm -f ${ERRFILE}
     return $RET
@@ -688,9 +688,11 @@ ltfs_reformat () {
 	if [ ${#need_format} -ge 1 ]; then
 	    ltfs_format ${volume_name_active} ${volume_serial}
 	else
-	    ltfs_wipe
+	    #ltfs_wipe
 	    ltfs_umount
-	    ltfs_format ${volume_name_active} ${volume_serial}
+	    if [ $? -eq 0 ]; then
+		ltfs_format ${volume_name_active} ${volume_serial}
+	    fi
 	fi
         ltfs_mount
     fi
@@ -1393,8 +1395,10 @@ parse_params () {
 		shift 2
 		;;
 	    --ltfs-reformat)
-		volume_name="$2"
-		shift 2
+		shift 1
+		count=$#
+		test $count -ge 1 && volume_name="$1"
+		shift $count
 		cmd=ltfs-reformat
 		;;
 	    --ltfs-umount)
