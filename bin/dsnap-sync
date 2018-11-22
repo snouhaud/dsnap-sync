@@ -1980,6 +1980,7 @@ run_finalize () {
 		# save target-id
 		if [ $snapper_source_id -gt 0 ]; then
 		    cmd="snapper --config $selected_config modify \
+		    	 --cleanup-algorithm \"dsnap-sync\" \
 		    	 --userdata \"tapeid=$volume_name\" \
 			 $snapper_source_id"
 
