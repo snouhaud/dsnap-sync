@@ -1836,9 +1836,9 @@ run_backup () {
 	# send the snapper info metadata
         if [ $dryrun -eq 0 ]; then
 	    if [ -z "$remote" ]; then
-		cp "$snapper_source_info" "$snapper_target_snapshot"
+		cp "$snapper_source_info" "$snapper_target_snapshot/info.xml"
 	    else
-		cmd="$scp $snapper_source_info root@$remote:$snapper_target_snapshot/"
+		cmd="$scp $snapper_source_info root@$remote:$snapper_target_snapshot/info.xml"
 		$(eval $cmd) 1>/dev/null
 	    fi
 	else
