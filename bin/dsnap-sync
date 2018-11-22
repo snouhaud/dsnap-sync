@@ -361,6 +361,11 @@ get_media_infos () {
 		volume_name=$(echo ${volume_name##*:} | sed -e 's/\r\n//g')
 	    fi
 	    get_tape_infos
+	    if [ $? -ne 0 ]; then
+		printf "${RED}Error: ${NO_COLOR}Can't use valid volume from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$mediapool_name"
+		die "Can't use valid tape."
+	    fi
 	else
 	    if [ ${#volume_name} -gt 0 ]; then
 		printf "${RED}Error: ${NO_COLOR}Can't use volume ${GREEN}'%s'${NO_COLOR} from MediaPool ${GREEN}'%s'${NO_COLOR}\n" \
@@ -1484,10 +1489,22 @@ run_backup () {
 	backup_dir=$(eval echo \$backupdir_$i)
 	backup_root=$(eval echo \$backup_root_$i)
 
-	# create the needed snapper structure on the target
 	if [ $verbose -ge 3 ]; then
-	    printf "Config_type '%s'\n" "$snapper_backup_type"
+	    printf "${MAGENTA}snapper_source_config: ${GREEN}'%s'${NO_COLOR}\n" \
+	    	   "$snapper_source_config"
+	    printf "${MAGENTA}snapper_target_config: ${GREEN}'%s'${NO_COLOR}\n" \
+	    	   "$snapper_target_config"
+	    printf "${MAGENTA}snapper_backup_type: ${GREEN}'%s'${NO_COLOR}\n" "$snapper_backup_type"
+	    printf "${MAGENTA}snapper_source_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
+	    	   "$snapper_source_sync_id"
+	    printf "${MAGENTA}snapper_target_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
+	    	   "$snapper_target_sync_id"
+	    printf "${MAGENTA}snapper_common_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
+	    	   "$snapper_common_sync_id"
+	    printf "${MAGENTA}backup_dir: ${GREEN}'%s'${NO_COLOR}\n" "$backup_dir"
 	fi
+
+	# create the needed snapper structure on the target
 	case $snapper_backup_type in
 	    btrfs-snapshot)
 		create_snapshot
@@ -1780,7 +1797,7 @@ run_backup () {
 			    ;;
 			1)
 			    # empty stream, no changes
-			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'1'${NO_COLOR}\n"
+			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'%s'${NO_COLOR}\n" "$ret"
 			    printf "${MAGENTA}  -> %s${NO_COLOR}\n" "$(cat <4)"
 			    run_cleanup ${selected_config}
 			    # go for next configuration
@@ -1788,7 +1805,7 @@ run_backup () {
 			    continue
 			    ;;
 			127)
-			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'127'${NO_COLOR}\n"
+			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'%s'${NO_COLOR}\n" "$ret"
 			    ;;
 			*)
 			    printf "${RED}btfs pipe ERROR: '%s'\n" "$ret"
@@ -2861,7 +2878,8 @@ verify_snapper_structure () {
 	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
 	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_snapshot"
 	fi
-    else
+    elif [ $? -eq 0 ]; then
+	# 256: a btrfs subvolume
 	if [ $ret -ne 256 ]; then
 	    printf "${RED}Error: ${GREEN}%s ${MAGENTA}needs to be a BTRFS subvolume. But given ${GREEN}%s ${MAGENTA}is just a directory.${NO_COLOR}\n" \
 		"$snapper_config" "$backup_root"
