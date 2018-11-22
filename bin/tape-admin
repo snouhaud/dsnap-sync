@@ -1478,6 +1478,10 @@ parse_params () {
 		shift $count
 		cmd=mtx-load
 		;;
+	    --mtx-status)
+		shift
+		cmd=mtx-status
+		;;
 	    --mtx-transfer)
 		shift
 		slots=${*}
@@ -2260,6 +2264,10 @@ case $cmd in
 	;;
     mtx-load)
 	mtx_load "${slot_source}" "${drive}"
+	return $?
+	;;
+    mtx-status)
+	mtx_status "${slot_source}" "${slot_target}"
 	return $?
 	;;
     mtx-transfer)
