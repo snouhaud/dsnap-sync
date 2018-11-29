@@ -604,6 +604,7 @@ ltfs_mount () {
 	    ${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
 	fi
 	if [ $? -eq 0 ]; then
+	    rm -f ${ERRFILE}
 	    return 0
 	else
 	    # format tape if needed
@@ -1176,7 +1177,7 @@ mtx_load () {
     fi
 
     make_err_file
-    ${MTX} -f $changer_device load $slot_source $drive 2>${ERRFILE}
+    ${MTX} -f $changer_device load $slot_source $drive 1>/dev/null 2>${ERRFILE}
     RET=$?
     rm -f ${ERRFILE}
 }
@@ -1223,11 +1224,11 @@ mtx_unload () {
 	if test $RET -eq 0; then
 	    break
 	fi
-	 grep "Error Code=" ${ERRFILE} 2>/dev/null 1>/dev/null
-	 if test $? -ne 0 ; then
-	     break
-	 fi
-	 sleep $i
+	grep "Error Code=" ${ERRFILE} 2>/dev/null 1>/dev/null
+	if test $? -ne 0 ; then
+	    break
+	fi
+	sleep $i
     done
     cat ${ERRFILE}
     rm -f ${ERRFILE} >/dev/null 2>&1
