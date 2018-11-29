@@ -559,6 +559,11 @@ ltfs_format () {
 	printf "${BLUE}ltfs_format...${NO_COLOR}\n"
     fi
 
+    if [ $verbose -ge 2 ]; then
+	printf "${MAGENTA}LTFS format tape ${GREEN}'%s'${MAGENTA} with serial ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$volume_serial"
+    fi
+
     make_err_file
     ${MKLTFS} --device=$ltfs_devname --volume-name=${volume_name} --tape-serial=${volume_serial} --force 2>${ERRFILE}
     RET=$?
@@ -689,13 +694,17 @@ ltfs_reformat () {
 	if [ ${#need_format} -ge 1 ]; then
 	    ltfs_format ${volume_name_active} ${volume_serial}
 	else
-	    #ltfs_wipe
 	    ltfs_umount
 	    if [ $? -eq 0 ]; then
-		ltfs_format ${volume_name_active} ${volume_serial}
+		ltfs_wipe
+		if [ $? -eq 0 ]; then
+		    ltfs_format ${volume_name_active} ${volume_serial}
+		fi
 	    fi
 	fi
-        ltfs_mount
+	if [ $? -eq 0 ]; then
+            ltfs_mount
+	fi
     fi
     return $?
 }
@@ -743,7 +752,16 @@ ltfs_wipe () {
 	printf "${BLUE}ltfs_wipe...${NO_COLOR}\n"
     fi
 
-    rm -rf $ltfs_mountpoint/*
+    #rm -rf $ltfs_mountpoint/*
+    make_err_file
+    ${MKLTFS} --device=$ltfs_devname --wipe --force 2>${ERRFILE}
+    RET=$?
+    rm -f ${ERRFILE}
+    if test $RET -eq 1; then
+	return 0
+    else
+	return $RET
+    fi
 }
 
 make_err_file() {
