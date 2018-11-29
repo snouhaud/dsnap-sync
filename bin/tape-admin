@@ -293,7 +293,7 @@ get_mediapool_names () {
     #local mediapool_name=${1}
 
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}get_mediapools...${NO_COLOR}\n"
+	printf "${BLUE}get_mediapool_names...${NO_COLOR}\n"
     fi
 
     if test ! -r ${mediapools_json}; then
@@ -1097,7 +1097,7 @@ mtx_getlabel () {
     export slot_source
 
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}mtx_get_label...${NO_COLOR}\n"
+	printf "${BLUE}mtx_getlabel...${NO_COLOR}\n"
     fi
 
     make_temp_file
@@ -1185,7 +1185,7 @@ mtx_status () {
     local changer_device=${changer_device:-$default_changer_device}
 
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}Tape status...${NO_COLOR}\n"
+	printf "${BLUE}mtx_status...${NO_COLOR}\n"
     fi
 
     ${MTX} -f $changer_device status
@@ -1198,7 +1198,7 @@ mtx_transfer () {
     local slot_target=${2##slot_target=}
 
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}Tape transfer...${NO_COLOR}\n"
+	printf "${BLUE}mtx_transfer...${NO_COLOR}\n"
     fi
 
     make_err_file
@@ -1213,7 +1213,7 @@ mtx_unload () {
     local drive=${2}
 
     if [ $verbose -ge 1 ]; then
-	printf "${BLUE}Tape unload...${NO_COLOR}\n"
+	printf "${BLUE}mtx_unload...${NO_COLOR}\n"
     fi
 
     make_err_file
