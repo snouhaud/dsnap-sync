@@ -1215,8 +1215,8 @@ mtx_unload () {
     fi
 
     make_err_file
-    ${MTX} -f $changer_device unload $slot_source $drive 1>/dev/null 2>${ERRFILE}
     for i in 1 2 3 4 5 ; do
+	${MTX} -f $changer_device unload $slot_source $drive 1>/dev/null 2>${ERRFILE}
 	RET=$?
 	if test $RET -eq 0; then
 	    break
