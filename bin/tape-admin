@@ -2243,8 +2243,13 @@ case $cmd in
 	    return 1
 	else
 	    if [ $verbose -ge 1 ]; then
-		printf "${MAGENTA}Tape ${GREEN}'%s'${MAGENTA} for ${GREEN}'%s'${MAGENTA} mounted${NO_COLOR}\n" \
-		       "${volume_name}" "${mediapool_name}"
+		if test ${#volume_name} -ge 1; then
+		    printf "${MAGENTA}Tape ${GREEN}'%s'${MAGENTA} for ${GREEN}'%s'${MAGENTA} mounted${NO_COLOR}\n" \
+			   "${volume_name}" "${mediapool_name}"
+		else
+		    printf "${MAGENTA}Next tape for mediapool ${GREEN}'%s'${MAGENTA} mounted${NO_COLOR}\n" \
+			   "${mediapool_name}"
+		fi
 	    fi
 	fi
     	;;
