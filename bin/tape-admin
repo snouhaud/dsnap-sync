@@ -831,9 +831,6 @@ mount_tape () {
 
     ltfs_is_mounted
     if test $? -eq 0; then
-	if [ $verbose -ge 1 ]; then
-	    printf "${MAGENTA}LTFS Tape is mounted.${NO_COLOR}\n"
-	fi
         # get date from last written tape in given mediapool
 	if [ "${#volume_name}" -eq 0 ]; then
 	    get_lastwrite ${mediapool_name}
@@ -846,12 +843,12 @@ mount_tape () {
 	mtx_getlabel $slot_source
 	if [ $? -eq 0 ]; then
 	    if [ $verbose -ge 2 ]; then
-		printf "${MAGENTA}Tape in drive: ${GREEN}%s${NO_COLOR}\n" \
+		printf "${MAGENTA}Active tape in drive: ${GREEN}%s${NO_COLOR}\n" \
 		       "${volume_name_active}"
 	    fi
             if [ "${#volume_name_active}" -ge 1 ] && [ "${volume_name_active}" != "${volume_name}" ]; then
-		if [ $verbose -ge 1 ]; then
-		    printf "${MAGENTA}Re-Mounting Tape: ${GREEN}%s${NO_COLOR}\n" \
+		if [ $verbose -ge 2 ]; then
+		    printf "${MAGENTA}Re-Mounting requested Tape: ${GREEN}%s${NO_COLOR}\n" \
 			   "${volume_name}"
 		fi
 		ltfs_umount
