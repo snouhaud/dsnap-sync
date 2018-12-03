@@ -697,9 +697,9 @@ ltfs_reformat () {
 	    ltfs_umount
 	    if [ $? -eq 0 ]; then
 		ltfs_wipe
-		if [ $? -eq 0 ]; then
+		#if [ $? -eq 0 ]; then
 		    ltfs_format ${volume_name_active} ${volume_serial}
-		fi
+		#fi
 	    fi
 	fi
 	if [ $? -eq 0 ]; then
@@ -754,14 +754,46 @@ ltfs_wipe () {
 
     #rm -rf $ltfs_mountpoint/*
     make_err_file
+    if [ $verbose -ge 2 ]; then
+	printf "${MAGENTA}Restore the LTFS medium to an unpartitioned medium ...${NO_COLOR}\n"
+    fi
+    # ltfs_error.h
+    #define PROG_NO_ERRORS            0x00 /* Success */
+    #define PROG_TREAT_SUCCESS        0x01 /* Treat as success */
+    #define PROG_REBOOT_REQUIRED      0x02 /* Reboot required */
+    #define PROG_UNCORRECTED          0x04 /* Cannot recover, the cartridge is modified */
+    #define PROG_OPERATIONAL_ERROR    0x08 /* Get device error while processing, the cartridge may be modified */
+    #define PROG_USAGE_SYNTAX_ERROR   0x10 /* Wrong argument */
+    #define PROG_CANCELED_BY_USER     0x20 /* Canceled by user */
+    #define PROG_SHARED_LIB_ERROR     0x40 /* Library error */
+
     ${MKLTFS} --device=$ltfs_devname --wipe --force 2>${ERRFILE}
     RET=$?
     rm -f ${ERRFILE}
-    if test $RET -eq 1; then
-	return 0
-    else
-	return $RET
+    if [ $verbose -ge 3 ]; then
+	printf "${MAGENTA}%s returncode: ${GREEN}%s${NO_COLOR}\n" \
+	       ${MKLTFS} $RET
     fi
+    case $RET in
+	1)
+	    printf "${MAGENTA}%s: Treat as success ${GREEN}%s${NO_COLOR}\n" \
+		   ${MKLTFS} $RET
+	    return 0
+	    ;;
+	2)
+	    printf "${MAGENTA}%s: Reboot required ${GREEN}%s${NO_COLOR}\n" \
+		   ${MKLTFS} $RET
+	    return 0
+	    ;;
+	8)
+	    printf "${MAGENTA}%s: Get device error while processing, the cartridge may be modified ${GREEN}%s${NO_COLOR}\n" \
+		   ${MKLTFS} $RET
+	    return $RET
+	    ;;
+	*)
+	    return $RET
+	    ;;
+    esac
 }
 
 make_err_file() {
