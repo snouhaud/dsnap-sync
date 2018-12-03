@@ -559,6 +559,13 @@ ltfs_format () {
 	printf "${BLUE}ltfs_format...${NO_COLOR}\n"
     fi
 
+    if [ ${#volume_serial} -eq 0 ]; then
+        tape_id=$(echo $volume_name | sed -e 's/\([[:alpha:]]*-\)//g')
+        # tape_id needs to be exactly 6 character long
+	volume_serial=$(printf "%0.s0" $(seq 1 $((6 - ${#tape_id}))))
+	volume_serial="${volume_serial}${tape_id}"
+    fi
+
     if [ $verbose -ge 2 ]; then
 	printf "${MAGENTA}LTFS format tape ${GREEN}'%s'${MAGENTA} with serial ${GREEN}'%s'${NO_COLOR}\n" \
 		   "$volume_name" "$volume_serial"
@@ -624,11 +631,7 @@ ltfs_mount () {
             need_format=$(grep "medium is not partitioned" ${ERRFILE})
             rm -f ${ERRFILE}
             if [ ${#need_format} -ge 1 ]; then
-                tape_id=$(echo $volume_name_active | sed -e 's/\([[:alpha:]]*-\)//g')
-                # tape_id needs to be exactly 6 character long
-		volume_serial=$(printf "%0.s0" $(seq 1 $((6 - ${#tape_id}))))
-		volume_serial="${volume_serial}${tape_id}"
-		ltfs_format ${volume_name_active} ${volume_serial}
+		ltfs_format ${volume_name_active}
                 ltfs_mount
             fi
 	    return $?
