@@ -586,6 +586,10 @@ ltfs_is_mounted () {
 	fi
 	return 0
     else
+	if [ $verbose -ge 2 ]; then
+	    printf "${MAGENTA}findmnt can't find an active mount target ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$ltfs_mountpoint"
+	fi
 	return 1
     fi
 }
