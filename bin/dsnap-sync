@@ -1534,11 +1534,10 @@ run_backup () {
 	    	   "$snapper_source_config"
 	    printf "${MAGENTA}snapper_target_config: ${GREEN}'%s'${NO_COLOR}\n" \
 	    	   "$snapper_target_config"
-	    printf "${MAGENTA}snapper_backup_type: ${GREEN}'%s'${NO_COLOR}\n" "$snapper_backup_type"
+	    printf "${MAGENTA}snapper_backup_type: ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$snapper_backup_type"
 	    printf "${MAGENTA}snapper_source_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
 	    	   "$snapper_source_sync_id"
-	    printf "${MAGENTA}snapper_target_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
-	    	   "$snapper_target_sync_id"
 	    printf "${MAGENTA}snapper_common_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
 	    	   "$snapper_common_sync_id"
 	    printf "${MAGENTA}backup_dir: ${GREEN}'%s'${NO_COLOR}\n" "$backup_dir"
@@ -2145,11 +2144,27 @@ run_finalize () {
 	fi
     else
 	# dry-run output
-	cmd="$ssh snapper --verbose --config $snapper_target_config modify -description $snap_description_finished --userdata $target_userdata --cleanup-algorithm $snap_cleanup_algorithm $snapper_sync_id"
+	case $snapper_backup_type in
+	    btrfs-archive)
+		printf "${MAGENTA}dryrun${NO_COLOR}: %s snapper --config %s modify\\ \n \
+\t--cleanup-algorithm 'dsnap-sync'\\ \n \
+\t--userdata 'tapeid=%s'\\ \n \
+\t'snapper_source_id'\n" \
+		       "$ssh" "$selected_config" "$volume_name"
+		;;
+	    btrfs-snapshot)
+		printf "${MAGENTA}dryrun${NO_COLOR}: %s snapper --config %s modify \\ \n \
+\t--description '%s' \\ \n \
+\t--cleanup-algorithm 'dsnap-sync' \\ \n \
+\t--userdata 'host=%s, subvolid=%s, uuid=%s' \\ \n \
+\t'snapper_source_id'\n" \
+		       "$ssh" "$selected_config" "$snap_description_finished" \
+		       "$src_host" "src_subvolid" "$src_uuid"
+		;;
+	esac
+	cmd="snapper --config $selected_config modify --description '$snap_description_synced' --userdata '$userdata' $snapper_sync_id"
 	printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
-	cmd="snapper --config $selected_config modify --description $snap_description_synced --userdata $userdata $snapper_sync_id"
-	printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
-	cmd="snapper --config $selected_config modify --description $snap_description_finished $snapper_source_sync_id"
+	cmd="snapper --config $selected_config modify --description '$snap_description_finished' $snapper_source_sync_id"
 	printf "${MAGENTA}dryrun${NO_COLOR}: %s\n" "$cmd"
     fi
 }
@@ -2811,8 +2826,13 @@ verify_snapper_structure () {
     fi
 
     if [ $verbose -ge 3 ]; then
-	printf "${MAGENTA}Verify snapper filesystem structure${NO_COLOR} on target ${GREEN}'%s'${NO_COLOR}...\n" \
-	       "$remote"
+	if [ $remote ]; then
+	    printf "${MAGENTA}Verify snapper filesystem structure${NO_COLOR} on target ${GREEN}'%s'${NO_COLOR}...\n" \
+		   "$remote"
+	else
+	    printf "${MAGENTA}Verify snapper filesystem structure${NO_COLOR} on target ${GREEN}'%s'${NO_COLOR}...\n" \
+		   "$backup_root"
+	fi
     fi
 
     # if not accessible, create backup-path
@@ -2911,14 +2931,16 @@ verify_snapper_structure () {
 	    # create the non existing remote BTRFS subvolume for given snapshot
 	    #cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshot 1>/dev/null"
 	    #$($cmd) || \
-		#	die "Creation of BTRFS subvolume (snapshot): %s:%s failed.\n" \
-		#	    "$remote_host" "$backup_root" "$remote_host"
+	    #	die "Creation of BTRFS subvolume (snapshot): %s:%s failed.\n" \
+	    #	    "$remote_host" "$backup_root" "$remote_host"
 	    #   cmd="$ssh chmod 0700 $backup_root 1>/dev/null"
 	    #   $($cmd) || \
-		#	die "Changing the directory mode for '$backup_root' on '$remote_host'."
+	    #	die "Changing the directory mode for '$backup_root' on '$remote_host'."
 	else
-	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper configuration from template %s ...\n" "$snapper_subvolume_template"
-	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper subvolume '%s' ...\n"  "$backup_root/$snapper_snapshot"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper configuration from template %s ...\n" \
+		   "$snapper_subvolume_template"
+	    printf "${MAGENTA}dryrun${NO_COLOR}: Would create new snapper subvolume '%s' ...\n" \
+		   "$backup_root/$snapper_snapshot"
 	fi
     elif [ $? -eq 0 ]; then
 	# 256: a btrfs subvolume
