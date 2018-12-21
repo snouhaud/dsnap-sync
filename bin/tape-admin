@@ -605,7 +605,6 @@ ltfs_mount () {
     if [ $verbose -ge 1 ]; then
 	printf "${BLUE}ltfs_mount...${NO_COLOR}\n"
     fi
-
     ltfs_is_mounted
     if [ $? -eq 1 ]; then
 	if [ ! -d $ltfs_mountpoint ]; then

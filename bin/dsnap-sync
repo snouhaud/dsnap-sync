@@ -2916,7 +2916,7 @@ verify_snapper_structure () {
             # create the non existing remote BTRFS subvolume for given config
 	    cmd="$ssh btrfs subvolume create $backup_root 1>/dev/null"
 	    ret=$(eval $cmd)
-	    if [ $ret -eq 1 ]; then
+	    if [ $? -ne 0 ]; then
 		printf "${RED}Error: ${MAGENTA}Creation of BTRFS subvolume (backup-root) ${GREEN}%s:%s${MAGENTA} failed.${NO_COLOR}\n" \
 		       "$remote_host" "$backup_root"
 		return 1
