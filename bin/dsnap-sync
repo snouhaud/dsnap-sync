@@ -745,7 +745,8 @@ get_snapper_last_sync_id () {
     local snapper_uuid=${3##snapper_uuid=}
     local snapper_subvolid=${4##snapper_subvolid=}
     local snapper_tapeid=${5##snapper_tapeid=}
-    local remote=${6##remote=}
+    local snapper_backupdir=${6##snapper_backupdir=}
+    local remote=${7##remote=}
     local run_ssh=''
 
     snapper_sync_id=0
@@ -792,6 +793,11 @@ get_snapper_last_sync_id () {
 	     | awk '/$snapper_description/' \
 	     | awk '/tapeid="$snapper_tapeid"/' \
 	     | awk 'END {print \$1}'"
+    elif  [ ${#backup_dir} -ge 1 ]; then
+	cmd="snapper --config $snapper_config list --type single \
+	     | awk '/$snapper_description/' \
+	     | awk '/backupdir="$backup_dir"/' \
+	     | awk 'END {print \$1}'"
     else
 	cmd="snapper --config $snapper_config list --type single \
 	     | awk '/$snapper_description/' \
@@ -803,7 +809,7 @@ get_snapper_last_sync_id () {
 	# ok, matching snapshot found
 	snapper_sync_snapshot=$SUBVOLUME/.snapshots/$snapper_sync_id/$snapper_snapshot_name
     else
-	# no snapshot found, try grap latest successfull sync
+	# no snapshot found, grap latest successfull sync
 	if [ ${#snapper_subvolid} -ge 1 -a ${#snapper_uuid} -ge 1 ]; then
 	    cmd="snapper --config $snapper_config list --type single \
 	    	| awk '/$snap_description_finished/' \
@@ -1285,15 +1291,16 @@ run_config_preparation () {
 	case $snapper_backup_type in
 	    btrfs-snapshot)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" \
+					 "snapper_backupdir=${backupdir}" "remote="
 		;;
 	    btrfs-clone)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "snapper_backupdir=" "remote="
 		;;
 	    btrfs-archive)
 		get_snapper_last_sync_id "snapper_config=${selected_config}" "snapper_description=${snap_description_synced}" \
-					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote="
+					 "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "snapper_backupdir=" "remote="
 					 #"snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=${volume_name}" "remote="
 		;;
 	    *)
@@ -1338,7 +1345,9 @@ run_config_preparation () {
 		*)
 		    get_snapper_last_sync_id "snapper_config=${snapper_target_config}" \
 					     "snapper_description=${snap_description_synced}" \
-					     "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" "remote=${remote}"
+					     "snapper_uuid=" "snapper_subvolid=" "snapper_tapeid=" \
+					     "snapper_backupdir=" \
+					     "remote=${remote}"
 		    ;;
 	    esac
 	    if [ $? -eq 0 ]; then
