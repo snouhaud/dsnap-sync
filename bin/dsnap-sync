@@ -1405,10 +1405,10 @@ run_config_preparation () {
 			    backup_root=$value
 			    snapper_target_sync_snapshot=$value/.snapshots/$snapper_target_sync_id/$snapper_snapshot_name
 			fi
-			# commandline will have priority
-			if  [ "$backup_root" -ne "$selected_target/$backupdir" ]; then
-				backup_root=$selected_target/$backupdir/$snapper_target_config
-				snapper_target_sync_snapshot=$backup_root/.snapshots/$snapper_target_sync_id/$snapper_snapshot_name
+			# commandline settings for backupdir on selected_target will have priority
+			if  [ "$backup_root" != "$selected_target/$backupdir" ]; then
+			    backup_root=$selected_target/$backupdir/$snapper_target_config
+			    snapper_target_sync_snapshot=$backup_root/.snapshots/$snapper_target_sync_id/$snapper_snapshot_name
 			fi
 			if [ $verbose -ge 3 ]; then
 		    		if [ $remote ]; then
