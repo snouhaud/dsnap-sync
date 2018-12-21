@@ -522,8 +522,9 @@ get_snapper_target_backupdir () {
 		       "$backupdir"
 		printf "${RED}TODO: ${NO_COLOR}Need to adapt ${GREEN}SUBVOLUME${NO_COLOR} for existing ${GREEN}target-config${NO_COLOR}, to reflect the new backupdir.\n"
 	    fi
-	    printf "${RED}Error: ${MAGENTA}Changing the backupdir for an already existing target-config is not supported yet${NO_COLOR}\n"
-	    return 1
+	    backupdir=$backupdir_cmdline
+	    #printf "${RED}Error: ${MAGENTA}Changing the backupdir for an already existing target-config is not supported yet${NO_COLOR}\n"
+	    #return 1
 	elif [ "$backupdir_cmdline" != 'none' ] && [ -z "$backupdir" ] ; then
 	    backupdir=$backupdir_cmdline
 	fi
@@ -1387,14 +1388,36 @@ run_config_preparation () {
 		    btrfs)
 			# get backupdir from snapper target
 			get_snapper_target_backupdir $backupdir
-
+			if [ $verbose -ge 3 ]; then
+		    		if [ $remote ]; then
+					printf "${MAGENTA}backupdir on remote '%s': ${GREEN}'%s'${NO_COLOR}\n" \
+			       		       "$remote" "$backupdir"
+				else
+					printf "${MAGENTA}backupdir: ${GREEN}'%s'${NO_COLOR}\n" \
+			       		       "$backupdir"
+				fi
+			fi
 			# set target sync_snapshot path
 			get_snapper_config_value "remote=$remote" \
-					 "snapper_config=$SNAPPER_CONFIG_DIR/$snapper_target_config" \
-					 "config_key=SUBVOLUME"
+						 "snapper_config=$SNAPPER_CONFIG_DIR/$snapper_target_config" \
+						 "config_key=SUBVOLUME"
 			if [ $? -eq 0 ]; then
-			    snapper_target_sync_snapshot=$value/.snapshots/$snapper_target_sync_id/$snapper_snapshot_name
 			    backup_root=$value
+			    snapper_target_sync_snapshot=$value/.snapshots/$snapper_target_sync_id/$snapper_snapshot_name
+			fi
+			# commandline will have priority
+			if  [ "$backup_root" -ne "$selected_target/$backupdir" ]; then
+				backup_root=$selected_target/$backupdir/$snapper_target_config
+				snapper_target_sync_snapshot=$backup_root/.snapshots/$snapper_target_sync_id/$snapper_snapshot_name
+			fi
+			if [ $verbose -ge 3 ]; then
+		    		if [ $remote ]; then
+					printf "${MAGENTA}backup_root on remote '%s': ${GREEN}'%s'${NO_COLOR}\n" \
+			       		"$remote" "$backup_root"
+		    		else
+					printf "${MAGENTA}backup_root: ${GREEN}'%s'${NO_COLOR}\n" \
+			       		"$backup_root"
+		    		fi
 			fi
 			;;
 		    *)
@@ -1510,6 +1533,7 @@ run_backup () {
 	    printf "${MAGENTA}snapper_common_sync_id: ${GREEN}'%s'${NO_COLOR}\n" \
 	    	   "$snapper_common_sync_id"
 	    printf "${MAGENTA}backup_dir: ${GREEN}'%s'${NO_COLOR}\n" "$backup_dir"
+	    printf "${MAGENTA}backup_root: ${GREEN}'%s'${NO_COLOR}\n" "$backup_root"
 	fi
 
 	# create the needed snapper structure on the target
