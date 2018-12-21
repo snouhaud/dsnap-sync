@@ -764,7 +764,7 @@ get_snapper_last_sync_id () {
 		printf "${MAGENTA}snapper config ${GREEN}'%s'${MAGENTA} on remote ${GREEN}'%s'${MAGENTA} does not exist yet.${NO_COLOR}\n" \
 		       $snapper_config $remote
 	    else
-		printf "${MAGENTA}snapper config ${GREEN}'%s'${MAGENTA} does not exist yes.${NO_COLOR}\n" \
+		printf "${MAGENTA}snapper config ${GREEN}'%s'${MAGENTA} does not exist yet.${NO_COLOR}\n" \
 		       $snapper_config
 	    fi
 	fi
