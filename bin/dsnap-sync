@@ -2649,6 +2649,7 @@ Options:
      --config-postfix <name> Specify a postfix that will be appended to the destination snapper config name
      --dry-run               perform a trial run (no changes are written)
      --mediapool             Specify the name of the tape MediaPool
+     --mode                  Force backup mode <full>
  -n, --noconfirm             Do not ask for confirmation for each configuration. Will still prompt for backup
      --nonotify              Disable graphical notification (via dbus)
      --nopv                  Disable graphical progress output (disable pv)
