@@ -1703,7 +1703,7 @@ run_backup () {
 		   || [ "$backup_mode" = "full" ] ; then
 		# send full snapshot to target
 		if [ $verbose -ge 2 ]; then
-		    if [ $snapper_source_snapshot_size -gt 0 ]; then
+		    if [ ${#snapper_source_snapshot_size} -gt 0 ]; then
 			printf "${MAGENTA}Sending ${GREEN}snapshot${NO_COLOR} for snapper config ${GREEN}'%s' ${MAGENTA}(id='%s', size='%s')${NO_COLOR} ...\n" \
 			       "$selected_config" "$snapper_source_id" "$snapper_source_snapshot_size"
 		    else
