@@ -576,22 +576,30 @@ get_disk_infos () {
 			 | awk '{print $2}')
 	else
 	    # remote root filesystem will be excluded as a valid target location
+	    sleep 0.2
 	    exclude_uuid=$($ssh findmnt --noheadings --nofsroot --mountpoint / --output UUID)
+	    sleep 0.2
 	    disk_uuids=$($ssh "findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
 	    		 | grep -v \"$exclude_uuid\" \
 			 | awk '{print \$1}'")
+	    sleep 0.2
 	    disk_targets=$($ssh "findmnt --noheadings --nofsroot --types btrfs --output UUID,TARGET --list \
 			   | grep -v \"$exclude_uuid\" \
 			   | awk '{print \$2}'")
+	    sleep 0.2
 	    fs_options=$($ssh "findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list \
 			 | grep -v \"$exclude_uuid\" \
 			 | awk '{print \$2}'")
         fi
     else
 	# target location is not mounted as root subvolume
+	sleep 0.2
 	disk_uuids=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID --list)
+	sleep 0.2
 	disk_targets=$($ssh findmnt --noheadings --nofsroot --types btrfs --output TARGET --list)
+	sleep 0.2
 	fs_options=$($ssh findmnt --noheadings --nofsroot --types btrfs --output UUID,OPTIONS --list | awk '{print $2}')
+	sleep 0.2
     fi
 
     # we need at least one target disk
