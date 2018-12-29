@@ -32,7 +32,7 @@ date_seconds=""
 default_changer_device="/dev/changer"
 dryrun=0
 ltfs_mountpoint="/media/tape"
-ltfs_devname="/dev/sg9"
+ltfs_devname=""
 mediapools_json="/etc/dsnap-sync/MediaPools.json"
 mediapool_name=""
 timezone="Europe/Berlin"
@@ -75,7 +75,6 @@ check_prerequisites () {
     which perl >/dev/null 2>&1 || { printf "'%s' is not installed.\n" perl && exit 1; }
     which awk >/dev/null 2>&1 || { printf "'%s' is not installed.\n" awk && exit 1; }
     which sed >/dev/null 2>&1 || { printf "'%s' is not installed.\n" sed && exit 1; }
-
 }
 
 compare_date () {
@@ -520,7 +519,6 @@ get_retensiondate () {
 }
 
 ltfs_get_attribute () {
-    local ltfs_devname=${ltfs_devname}
     local ltfs_attribute_name=${1:-volumeName}
 
     if [ $verbose -ge 1 ]; then
@@ -550,8 +548,32 @@ ltfs_get_attribute () {
     return $?
 }
 
+ltfs_get_devname () {
+    if [ $verbose -ge 1 ]; then
+	printf "${BLUE}ltfs_get_devname...${NO_COLOR}\n"
+    fi
+
+    ltfs_is_mounted
+    if [ $? -eq 1 ]; then
+	make_err_file
+	ltfs -o device_list -o quiet 2>/dev/null${LTFS} -o device_list 2>${ERRFILE}
+	# ltfs returns '1'
+	RET=$?
+	if [ $RET -eq 1 ]; then
+	    ltfs_devname=$(cat $ERRFILE | awk  -F ',' ' /Vender ID/ {print $1}' | awk -F '= ' '{print $2}')
+	    if [ $verbose -ge 2 ]; then
+		printf "${MAGENTA}LTFS device name: ${GREEN}'%s'${MAGENTA}\n" \
+		       $ltfs_devname
+	    fi
+	    rm -f ${ERRFILE}
+	    return 0
+	else
+	    return $RET
+	fi
+    fi
+}
+
 ltfs_format () {
-    local ltfs_devname=${ltfs_devname}
     local volume_name=${1}
     local volume_serial=${2}
 
@@ -579,8 +601,6 @@ ltfs_format () {
 }
 
 ltfs_is_mounted () {
-    local ltfs_devname
-
     if [ $verbose -ge 1 ]; then
 	printf "${BLUE}ltfs_is_mounted...${NO_COLOR}\n"
     fi
@@ -750,7 +770,6 @@ ltfs_umount () {
 }
 
 ltfs_wipe () {
-    local ltfs_devname=${ltfs_devname}
     local volume_name=${1}
     local tape_id=${2}
 
@@ -2087,6 +2106,9 @@ check_prerequisites
 
 # validate commandline options, set resonable defaults
 parse_params $@
+
+# validate the device name to access ltfs
+ltfs_get_devname
 
 case $cmd in
     add-retensiondays)
