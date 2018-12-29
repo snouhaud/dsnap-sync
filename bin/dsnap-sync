@@ -3113,8 +3113,11 @@ run_backup
 
 # cleanup
 if [ -d $TMPDIR ]; then
+    if [ $verbose -ge 2 ]; then
+	printf "${MAGENTA}Cleanup temporary directory ${GREEN}'%s'${NO_COLOR}\n" \
+	       $TMPDIR
+    fi
     rm -rf $TMPDIR || die "Failed to cleanup temporary directory '%s'\n" "$TMPDIR"
-    #printf "${RED}TODO: ${NO_COLOR}Will remove $TMPDIR}"
 fi
 
 printf "${BLUE}Backup run completed!${NO_COLOR}\n"
