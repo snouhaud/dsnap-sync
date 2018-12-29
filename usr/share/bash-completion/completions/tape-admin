@@ -1,0 +1,66 @@
+# original by Ralf Zerres <ralf.zerres@networkx.de>
+
+_tape_admin()
+{
+	local cur prev words cword
+	_init_completion || return
+
+	COMPREPLY=()
+
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+	local cmd=${words[1]}
+
+	commands_mediapool='--get-lastwrite --get-mediapool-name --get-mediapools --get-mediapolicy --get-poolmember --get-poolmember-next '
+	commands_mediapool="$commands_mediapool --add-retensiondays --get-retensiondays --get-slot --media-change --mount"
+	commands_mediapool="$commands_mediapool --update-lastwrite --update-retensiondate --update-retensiondays"
+	commands_ltfs='--ltfs-getattribute --ltfs-format --ltfs-is-mounted --ltfs-mount --ltfs-reformat --ltfs-umount'
+	commands_mtx='--mtx-exchange --mtx-getlabel --mtx-inventory --mtx-load --mtx-status --mtx-transfer --mtx-unload --use-mtx'
+	commands_generic='--color --help --version'
+	commands='$commands_generic $commands_mediapool $commands_ltfs $commands_mtx'
+
+	commands_ltfs_attributes='volume_id volume_name'
+
+	#if [[ "$cur" == -* && $cword -le 2 && "$cmd" != "help" ]]; then
+	#	COMPREPLY=( $( compgen -W '--help' -- "$cur" ) )
+	#	return 0
+	#fi
+
+	COMPREPLY=( $(compgen -W "${commands}" -- ${cur}) )
+
+	if [[ $cword -eq 1 ]]; then
+		COMPREPLY=( $( compgen -W "$commands" -- "$cur" ) )
+		return 0
+	elif [[ $cword -eq 2 ]]; then
+		case $cmd in
+			--ltfs-getattribute)
+				opts="$commands_ltfs_attributes"
+				;;
+			version)
+				return 0
+				;;
+		esac
+		COMPREPLY=( $( compgen -W "$opts" -- "$cur" ) )
+		return 0
+	elif [[ $cword -eq 3 ]]; then
+                case $cmd in
+                        --ltfs-getattribute)
+                                case $prev in
+                                        volume_id)
+                                                return 0
+                                                ;;
+                                        volume_name)
+                                                return 0
+                                                ;;
+				esac
+				;;
+		esac
+	fi
+
+	return 0
+}
+
+complete -F _tape_admin tape-admin
+
+# ex: filetype=sh
