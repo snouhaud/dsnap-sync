@@ -118,14 +118,9 @@ check_prerequisites () {
     which notify-send >/dev/null 2>&1 && { donotify=1; }
     which pv >/dev/null 2>&1 && { do_pv_cmd=1; }
     which tape-admin >/dev/null 2>&1 && { tape_admin_cmd=1; }
+    which nc >/dev/null 2>&1 && { nc_cmd=1; }
 
     if [ $(id -u) -ne 0 ] ; then printf "$progname: must be run as root\n" ; exit 1 ; fi
-
-    if [ -n "$remote" ]; then
-	$ssh which sh >/dev/null 2>&1 || \
-	    { printf "'remote shell' is not working!\n \
-	          Please correct your public authentication and try again.\n" && exit 1; }
-    fi
 
     if [ ! -r "$SNAPPER_CONFIG" ]; then
 	die "$progname: $SNAPPER_CONFIG does not exist."
@@ -1186,6 +1181,16 @@ parse_params () {
 	if [ ! -z "$port" ]; then
 	    ssh="$ssh -p $port"
 	    scp="$scp -P $port"
+	else
+	    port=22
+	fi
+	if [ $nc_cmd ]; then
+	    nc -w 3 -z $remote $port > /dev/null || \
+		die "Can't connect to remote host."
+	else
+	    $ssh which sh >/dev/null 2>&1 || \
+	    { printf "'remote shell' is not working!\n \
+	          Please correct your public authentication and try again.\n" && exit 1; }
 	fi
     fi
 
