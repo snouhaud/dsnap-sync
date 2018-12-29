@@ -562,7 +562,7 @@ ltfs_get_devname () {
 	if [ $RET -eq 1 ]; then
 	    ltfs_devname=$(cat $ERRFILE | awk  -F ',' ' /Vender ID/ {print $1}' | awk -F '= ' '{print $2}')
 	    if [ $verbose -ge 2 ]; then
-		printf "${MAGENTA}LTFS device name: ${GREEN}'%s'${MAGENTA}\n" \
+		printf "${MAGENTA}LTFS device name: ${GREEN}'%s'${NO_COLOR}\n" \
 		       $ltfs_devname
 	    fi
 	    rm -f ${ERRFILE}
@@ -601,12 +601,15 @@ ltfs_format () {
 }
 
 ltfs_is_mounted () {
+    local ltfs_devname_mounted
+
     if [ $verbose -ge 1 ]; then
 	printf "${BLUE}ltfs_is_mounted...${NO_COLOR}\n"
     fi
 
-    ltfs_devname=$(findmnt -n -T $ltfs_mountpoint -o source | awk -F ':' '{print $2}')
-    if [ ${#ltfs_devname} -gt 1 ]; then
+    ltfs_devname_mounted=$(findmnt -n -T $ltfs_mountpoint -o source | awk -F ':' '{print $2}')
+    if [ ${#ltfs_devname_mounted} -gt 1 ]; then
+	ltfs_devname=$ltfs_devname_mounted
 	if [ $verbose -ge 2 ]; then
 	    printf "${MAGENTA}LTFS tape is mounted via ${GREEN}'%s'${MAGENTA} at ${GREEN}'%s'${NO_COLOR}\n" \
 		   "$ltfs_devname" "$ltfs_mountpoint"
@@ -2104,11 +2107,11 @@ trap trapkill TERM INT
 
 check_prerequisites
 
-# validate commandline options, set resonable defaults
-parse_params $@
-
 # validate the device name to access ltfs
 ltfs_get_devname
+
+# validate commandline options, set resonable defaults
+parse_params $@
 
 case $cmd in
     add-retensiondays)
