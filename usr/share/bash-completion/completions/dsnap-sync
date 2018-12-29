@@ -1,0 +1,45 @@
+# original by Ralf Zerres <ralf.zerres@networkx.de>
+
+_dsnap_sync()
+{
+	local cur prev words cword
+	_init_completion || return
+
+	COMPREPLY=()
+
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+	local cmd=${words[1]}
+
+	commands_comments='--description --label-finished --label-running --label-synced'
+	commands_generic='--batch --color --dry-run --help --noconfirm --nonotify --nopv --noionice --use-btrfs-quota --verbose --version'
+	commands_sync='--automount --backupdir --backuptype --config --config-postfix '
+	commands_tape='--volumename --media-pool '
+	commands_target='--port --remote --subvolid --uuid --target'
+	commands='$commands_comments $commands_generic $commands_sync $commands_tape $command_target'
+
+	#if [[ "$cur" == -* && $cword -le 2 && "$cmd" != "help" ]]; then
+	#	COMPREPLY=( $( compgen -W '--help' -- "$cur" ) )
+	#	return 0
+	#fi
+
+	COMPREPLY=( $(compgen -W "${commands}" -- ${cur}) )
+
+	if [[ $cword -eq 1 ]]; then
+		COMPREPLY=( $( compgen -W "$commands" -- "$cur" ) )
+		return 0
+	elif [[ $cword -eq 2 ]]; then
+		case $cmd in
+			version)
+				return 0
+				;;
+		esac
+		COMPREPLY=( $( compgen -W "$opts" -- "$cur" ) )
+		return 0
+	fi
+
+	return 0
+}
+
+complete -F _dsnap_sync dsnap-sync
