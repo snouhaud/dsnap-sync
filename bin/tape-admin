@@ -1082,7 +1082,11 @@ mount_tape () {
 		mtx_unload
 		if [ $? -eq 0 ]; then
                     mount_tape "${mediapool_name}" "${volume_name}"
-		    return 0
+		    if [ $? -eq 0 ]; then
+			return 0
+		    else
+			return $?
+		    fi
 		else
 		    return $?
 		fi
@@ -1090,7 +1094,9 @@ mount_tape () {
 	else
 	    # mount new tape
 	    get_slot ${mediapool_name} ${volume_name}
-	    mtx_load ${volume_slot}
+	    if [ $? -eq 0 ]; then
+		mtx_load ${volume_slot}
+	    fi
 	fi
 
 	# volume_name is member of given mediapool
@@ -1116,8 +1122,16 @@ mount_tape () {
 		    if [ $verbose -ge 1 ]; then
 			printf "${MAGENTA}Tape is bocked via RetensionDate.\n"
 	    	    fi
-		    ltfs_mount
-		    return 0
+		    get_poolmember_next "${mediapool_name}"
+		    if test $? -eq 0; then
+			if [ $verbose -ge 2 ]; then
+			    printf "${MAGENTA}MediaPool: ${GREEN}%s${NO_COLOR} (using next tape: ${GREEN}%s${NO_COLOR})\n" \
+				   "${mediapool_name}" "${volume_name_next}"
+			fi
+			# recurse all over again
+			mount_tape "${mediapool_name}" "${volume_name_next}"
+			return 0
+		    fi
 	    	fi
 	    fi
 	    if [ ${volume_mediapolicy} = "overwrite" ] ; then
