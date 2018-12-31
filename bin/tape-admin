@@ -1502,11 +1502,11 @@ parse_params () {
 	    --add-retensiondays)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[-a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
-		test $count -lt 2 && usage
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
 		mediapool_name="$1"
 		volume_name="$2"
 		test $count -ge 3 && retension_days="$3"
@@ -1521,15 +1521,30 @@ parse_params () {
 	    --get-lastwrite)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
 		test $count -ge 1 && mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
 		shift $count
 		cmd=get-lastwrite
+		;;
+	    --get-mediapolicy)
+		shift 1
+		pool_params=${*}
+		pool_params="${pool_params%% -[a-z]*}"
+		params=$*
+		set -- $pool_params
+		count=$#
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
+		test $count -ge 1 && mediapool_name="$1"
+		test $count -ge 2 && volume_name="$2"
+		set -- $params
+		shift $count
+		cmd=get-mediapolicy
 		;;
 	    --get-mediapool-name)
 		volume_name=$2
@@ -1543,10 +1558,11 @@ parse_params () {
 	    --get-poolmember)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
+		test $count -lt 1 && printf "missing argument: mediapool_name\n" && exit 1
 		test $count -ge 1 && mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
@@ -1556,10 +1572,11 @@ parse_params () {
 	    --get-poolmember-next)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
+		test $count -lt 1 && printf "missing argument: mediapool_name\n" && exit 1
 		test $count -ge 1 && mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
@@ -1569,36 +1586,25 @@ parse_params () {
 	    --get-retensiondate)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[-a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
 		test $count -ge 1 && mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
 		shift $count
 		cmd=get-retensiondate
 		;;
-	    --get-retensiondate)
-		shift 1
-		pool_params=${*}
-		pool_params="${pool_params%% -*}"
-		params=$*
-		set -- $pool_params
-		count=$#
-		test $count -ge 1 && mediapool_name="$1"
-		set -- $params
-		shift $count
-		cmd=get-retensiondays
-		;;
 	    --get-retensiondays)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
-		test $count -lt 1 && usage
+		test $count -lt 1 && printf "missing argument: mediapool_name\n" && exit 1
 		mediapool_name="$1"
 		set -- $params
 		shift $count
@@ -1607,10 +1613,11 @@ parse_params () {
 	    --get-slot)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
 		test $count -ge 1 && mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
@@ -1620,10 +1627,11 @@ parse_params () {
 	    --ltfs-format)
 		shift 1
 		ltfs_params=${*}
-		ltfs_params="${ltfs_params%% -*}"
+		ltfs_params="${ltfs_params%% -[a-z]*}"
 		params=$*
 		set -- $ltfs_params
 		count=$#
+		test $count -lt 1 && printf "missing argument: volume_name\n" && exit 1
 		test $count -ge 1 && volume_name="$1"
 		test $count -ge 2 && tape_id="$2"
 		set -- $params
@@ -1645,6 +1653,7 @@ parse_params () {
 	    --ltfs-reformat)
 		shift 1
 		count=$#
+		test $count -lt 1 && printf "missing argument: volume_name\n" && exit 1
 		test $count -ge 1 && volume_name="$1"
 		shift $count
 		cmd=ltfs-reformat
@@ -1656,11 +1665,11 @@ parse_params () {
 	    --media-change)
 		shift 1
 		tape_params=${*}
-		tape_params="${tape_params%% -*}"
+		tape_params="${tape_params%% -[a-z]*}"
 		params=$*
 		set -- $tape_params
 		count=$#
-		test $count -lt 1 && usage
+		test $count -lt 1 && printf "missing argument: mediapool_name\n" && exit 1
 		mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
@@ -1670,11 +1679,11 @@ parse_params () {
 	    --mount)
 		shift 1
 		tape_params=${*}
-		tape_params="${tape_params%% -*}"
+		tape_params="${tape_params%% -[a-z]*}"
 		params=$*
 		set -- $tape_params
 		count=$#
-		test $count -lt 1 && usage
+		test $count -lt 1 && printf "missing argument: mediapool_name\n" && exit 1
 		mediapool_name="$1"
 		test $count -ge 2 && volume_name="$2"
 		set -- $params
@@ -1684,11 +1693,11 @@ parse_params () {
 	    --mtx-exchange)
 		shift
 		slots=${*}
-		slots="${slots%% -*}"
+		slots="${slots%% -[-a-z]*}"
 		params=$*
 		set -- $slots
 		count=$#
-		test $count -lt 2 && usage
+		test $count -lt 2 && printf "missing arguments: slot_source, slot_target\n" && exit 1
 		slot_source="$1"
 		slot_target="$2"
 		set -- $params
@@ -1698,7 +1707,7 @@ parse_params () {
 	    --mtx-getlabel)
 		shift
 		slots=${*}
-		slots="${slots%% -*}"
+		slots="${slots%% -[-a-z]*}"
 		params=$*
 		set -- $slots
 		count=$#
@@ -1715,11 +1724,11 @@ parse_params () {
 	    --mtx-load)
 		shift
 		slots=${*}
-		slots="${slots%% -*}"
+		slots="${slots%% -[-a-z]*}"
 		params=$*
 		set -- $slots
 		count=$#
-		test $count -lt 1 && usage
+		test $count -lt 1 && printf "missing argument: slot_source\n" && exit 1
 		slot_source="$1"
 		test $count -eq 2 && drive="$2"
 		set -- $params
@@ -1733,11 +1742,11 @@ parse_params () {
 	    --mtx-transfer)
 		shift
 		slots=${*}
-		slots="${slots%% -*}"
+		slots="${slots%% -[-a-z]*}"
 		params=$*
 		set -- $slots
 		count=$#
-		test $count -lt 2 && usage
+		test $count -lt 2 && printf "missing argument: slot_source, slot_target\n" && exit 1
 		slot_source="${1}"
 		slot_target="${2}"
 		set -- $params
@@ -1747,11 +1756,11 @@ parse_params () {
 	    --mtx-unload)
 		shift
 		slots=${*}
-		slots="${slots%% -*}"
+		slots="${slots%% -[-a-z]*}"
 		params=$*
 		set -- $slots
 		count=$#
-		test $count -lt 1 && usage
+		test $count -lt 1 && printf "missing argument: slot_source\n" && exit 1
 		slot_source="$1"
 		test $count -eq 2 && drive="$2"
 		set -- $params
@@ -1781,22 +1790,24 @@ parse_params () {
 	    --ltfs-getattribute)
 		shift 1
 		ltfs_params=${*}
-		ltfs_params="${ltfs_params%% -*}"
+		ltfs_params="${ltfs_params%% -[-a-z]*}"
 		params=$*
 		set -- $ltfs_params
 		count=$#
 		test $count -eq 0 && ltfs_attribute_name="volumeName"
+		test $count -eq 1 && ltfs_attribute_name="$1"
+		set -- $params
 		shift $count
 		cmd=ltfs-getattribute
 		;;
 	    --update-lastwrite)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[-a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
-		test $count -lt 2 && usage
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
 		mediapool_name="$1"
 		volume_name="$2"
 		test $count -ge 3 && date_string="$3"
@@ -1807,11 +1818,11 @@ parse_params () {
 	    --update-retensiondate)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[-a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
-		test $count -lt 2 && usage
+		test $count -lt 2 && printf "missing arguments: mediapool_name, volume_name\n" && exit 1
 		mediapool_name="$1"
 		volume_name="$2"
 		test $count -ge 3 && date_string="$3"
@@ -1822,12 +1833,13 @@ parse_params () {
 	    --update-retensiondays)
 		shift 1
 		pool_params=${*}
-		pool_params="${pool_params%% -*}"
+		pool_params="${pool_params%% -[-a-z]*}"
 		params=$*
 		set -- $pool_params
 		count=$#
-		test $count -lt 2 && usage
+		test $count -lt 2 && printf "missing arguments: mediapool_name, retensiondays\n" && exit 1
 		mediapool_name="$1"
+		test $(expr $2 : '^[[:digit:]]\+') -eq 0 &&  printf "missing arguments: retensiondays must be an integer\n" && exit 1
 		mediapool_defaultretensiondays="$2"
 		set -- $params
 		shift $count
