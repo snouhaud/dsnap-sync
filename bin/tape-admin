@@ -617,7 +617,7 @@ ltfs_is_mounted () {
 	return 0
     else
 	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}findmnt can't find an active mount target ${GREEN}'%s'${NO_COLOR}\n" \
+	    printf "${MAGENTA}findmnt: no target mounted at ${GREEN}'%s'${NO_COLOR}\n" \
 		   "$ltfs_mountpoint"
 	fi
 	return 1
@@ -762,10 +762,8 @@ ltfs_umount () {
 		return 0
 		;;
 	    *)
-		if [ $verbose -ge 2 ]; then
-		    printf "${RED}Error: '%s' ${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} is in use!${NO_COLOR}\n" \
+		printf "${RED}Error: '%s' ${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} is in use!${NO_COLOR}\n" \
 			   "$ret" "$ltfs_mountpoint"
-		fi
 		return 1
 		;;
 	esac
@@ -1077,6 +1075,10 @@ mount_tape () {
 		       "${volume_name_active}"
 	    fi
             if [ "${#volume_name_active}" -gt 1 ] && [ "${volume_name_active}" != "${volume_name}" ]; then
+		if [ $verbose -ge 2 ]; then
+		    printf "${MAGENTA}Active tape ${GREEN}%s${MAGENTA} needs to be exchanged with ${GREEN}%s${NO_COLOR}\n" \
+			   "${volume_name_active}" "${volume_name}"
+		fi
 		mtx_unload
 		if [ $? -eq 0 ]; then
                     mount_tape "${mediapool_name}" "${volume_name}"
@@ -1099,7 +1101,7 @@ mount_tape () {
 	            printf "${MAGENTA}Valid tape mediapolicy: ${GREEN}%s${NO_COLOR}\n" \
 		           "${volume_mediapolicy}"
 	        fi
-		volume_retensiondate="20180101000000"
+		#volume_retensiondate="20180101000000"
 		get_retensiondate ${mediapool_name} ${volume_name}
 	    	date_now=$($date_cmd)
 	    	compare_date $date_now $volume_retensiondate
@@ -1255,6 +1257,17 @@ mtx_load () {
     ${MTX} -f $changer_device load $slot_source $drive 1>/dev/null 2>${ERRFILE}
     RET=$?
     rm -f ${ERRFILE}
+
+    if [ $verbose -ge 2 ]; then
+	if [ $RET -eq 0 ]; then
+	   printf "${MAGENTA}Successfully loaded tape to drive ${GREEN}%s${NO_COLOR}\n" \
+		  "$drive"
+	else
+	   printf "${RED}Error: Can't loaded tape to drive ${GREEN}%s${NO_COLOR}\n" \
+		  "$drive"
+	   return $RET
+	fi
+    fi
 }
 
 mtx_status () {
