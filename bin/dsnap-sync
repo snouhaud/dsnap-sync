@@ -1,4 +1,4 @@
-#! /bin/dash
+#! /bin/sh
 
 # dsnap-sync
 # https://github.com/rzerres/dsnap-sync
