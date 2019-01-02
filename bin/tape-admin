@@ -285,6 +285,13 @@ get_lastwrite () {
     fi
 
     if [ ${#volume_name} -ge 1 ]; then
+	get_poolmember $mediapool_name $volume_name
+	if [ $? -ne 0 ]; then
+	    printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name"
+	    return 1
+	fi
+
 	# select last write date for given volume
 	cmd="jq --monochrome-output --ascii-output ' .MediaPool[] \
     	    | select(.Name == \"${mediapool_name}\") \
@@ -516,6 +523,12 @@ get_poolmember_next () {
 	exit 1
     fi
 
+    get_poolmember $mediapool_name $volume_name
+    test $? -ne 0 &&
+	printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name" &&
+	return 1
+
     cmd="jq --monochrome-output --ascii-output ' .MediaPool[] \
     	    | select(.Name == \"${mediapool_name}\") \
 	    | .Member \
@@ -570,6 +583,12 @@ get_slot () {
 	exit 1
     fi
 
+    get_poolmember $mediapool_name $volume_name
+    test $? -ne 0 &&
+	printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name" &&
+	return 1
+
     cmd="jq --monochrome-output --ascii-output ' .MediaPool[] \
     	    | select(.Name == \"${mediapool_name}\") \
 	    | .Member[] \
@@ -601,6 +620,12 @@ get_retensiondate () {
 	fi
 	exit 1
     fi
+
+    get_poolmember $mediapool_name $volume_name
+    test $? -ne 0 &&
+	printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name" &&
+	return 1
 
     cmd="jq --monochrome-output --ascii-output '(.MediaPool[] \
     	    | select(.Name == \"${mediapool_name}\") \
@@ -1935,6 +1960,12 @@ update_lastwrite () {
     fi
 
     if [ ${#volume_name} -ge 1 ]; then
+	get_poolmember $mediapool_name $volume_name
+	test $? -ne 0 &&
+	    printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name" &&
+	    return 1
+
 	# update last write date for given volume (date field in utc)
 	if [ "${date_string}" = "now" ]; then
 	    volume_lastwrite=$($date_cmd)
@@ -2037,6 +2068,12 @@ update_retensiondate () {
     fi
 
     if [ ${#volume_name} -ge 1 ]; then
+	get_poolmember $mediapool_name $volume_name
+	test $? -ne 0 &&
+	    printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name" &&
+	    return 1
+
 	# update retension date for given volume (date field in utc)
 	if [ "${date_string}" = "now" ]; then
 	    volume_retensiondate=$($date_cmd)
