@@ -662,7 +662,7 @@ ltfs_get_devname () {
     ltfs_is_mounted
     if [ $? -eq 1 ]; then
 	make_err_file
-	ltfs -o device_list -o quiet 2>/dev/null${LTFS} -o device_list 2>${ERRFILE}
+	ltfs -o device_list -o quiet 2>/dev/null -o device_list 2>${ERRFILE}
 	# ltfs returns '1'
 	RET=$?
 	if [ $RET -eq 1 ]; then
@@ -1299,7 +1299,7 @@ mtx_getlabel () {
     fi
 
     make_temp_file
-    ${MTX} -f $changer_device status >${TMPFILE}
+    ${MTX} -f $changer_device status >${TMPFILE} 2>/dev/null
     RET=$?
 
     case ${slot_source} in
