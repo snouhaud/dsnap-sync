@@ -803,21 +803,35 @@ ltfs_reformat () {
 	if [ ! -d $ltfs_mountpoint ]; then
 	    mkdir -p $ltfs_mountpoint
 	fi
-        make_err_file
-	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}LTFS mounting tape ${GREEN}'%s'${MAGENTA} to ${GREEN}'%s'${NO_COLOR}\n" \
-		   "$ltfs_devname" "$ltfs_mountpoint"
-	    ${LTFS} -o devname=$ltfs_devname -o verbose=$verbose $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
-	else
-	    ${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
-	fi
-	if [ $? -ge 0 ]; then
-            if [ -z $volume_name_active ]; then
-                slot_source="0"
-                mtx_getlabel $slot_source
-            fi
-            need_format=$(grep "medium is not partitioned" ${ERRFILE})
-            rm -f ${ERRFILE}
+	get_mediapool_name "${volume_name}"
+	if [ $? -eq 0 ]; then
+	    get_slot "${mediapool_name}" "${volume_name}"
+	    if [ $? -eq 0 ]; then
+		slot_source=0
+		mtx_getlabel ${slot_source}
+		if [ $? -eq 0 ]; then
+		    if [ ${volume_name_active} != ${volume_name} ]; then
+			mtx_unload ${slot_source}
+			mtx load ${volume_slot}
+		    fi
+		    make_err_file
+		    if [ $verbose -ge 2 ]; then
+			printf "${MAGENTA}LTFS mounting tape ${GREEN}'%s'${MAGENTA} to ${GREEN}'%s'${NO_COLOR}\n" \
+			       "$ltfs_devname" "$ltfs_mountpoint"
+			${LTFS} -o devname=$ltfs_devname -o verbose=$verbose $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
+		    else
+			${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
+		    fi
+		    if [ $? -ge 0 ]; then
+			if [ -z $volume_name_active ]; then
+			    slot_source="0"
+			    mtx_getlabel $slot_source
+			fi
+			need_format=$(grep "medium is not partitioned" ${ERRFILE})
+			rm -f ${ERRFILE}
+		    fi
+		fi
+	    fi
 	fi
     fi
 
