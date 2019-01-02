@@ -35,6 +35,7 @@ ltfs_mountpoint="/media/tape"
 ltfs_devname=""
 mediapools_json="/etc/dsnap-sync/MediaPools.json"
 mediapool_name=""
+quiet=false
 timezone="Europe/Berlin"
 use_mtx=0
 verbose=0
@@ -514,6 +515,10 @@ get_retensiondate () {
 		   "$volume_name" "$mediapool_name" "$volume_retensiondate"
 	fi
     else
+	if ! quiet; then
+	    printf "${MAGENTA}No RetensionDate for given tape ${GREEN}'%s'${MAGENTA} in media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name"
+	fi
 	return 1
     fi
 }
@@ -1621,6 +1626,10 @@ parse_params () {
 	    #	remote=$2
 	    #	shift 2
 	    #	;;
+	    -q|--quiet)
+		quiet=true
+		shift 1
+		;;
 	    --use-mtx)
 		use_mtx=1
 		shift 1
@@ -1766,7 +1775,7 @@ parse_params () {
 	#fi
 
 	if [ $verbose -ge 1 ]; then tape_options="verbose_level=$verbose"; fi
-	#if [ $dryrun -eq 1 ]; then tape_options="${tape_options} dry-run=true"; fi
+	if $quiet ; then tape_options="verbose_level=0 quiet=true"; fi
 	if [ $color -eq 1 ]; then tape_options="${tape_options} color=true"; fi
 	if [ $use_mtx -eq 1 ]; then tape_options="${tape_options} use-mtx=true"; fi
 	printf "Options:            '%s'\n\n" "${tape_options}"
@@ -2103,10 +2112,13 @@ Options:
                             (input attribute: slot_source drive)
      --mount                make tape accessible for OS
                             (input attribute: <mediapool_name> [<volume_name>])
+     -q, --quiet            Be quiet
      --update-lastwrite     update LastWrite attribute for given TapeName in Pool (JSON-File)
-                            (input attribute: <mediapool> <volume_name> [<YYYYMMDDHHMMSS> )
+                            if no datestring is specified, use "now"
+			    (input attribute: <mediapool> <volume_name> [<YYYYMMDDHHMMSS> )
      --update-retensiondate update RetensionDate attribute for given TapeName in Pool (JSON-File)
-                            (input attribute: <mediapool> <volume_name> [<YYYYMMDDHHMMSS> )
+                            if no datestring is specified, use "now"
+			    (input attribute: <mediapool> <volume_name> [<YYYYMMDDHHMMSS> )
      --update-retensiondays update DefaultRetensionDays attribute for given Pool (JSON-File)
                             (input attribute: <mediapool>)
      --use-mtx              use mtx loader handling. If not specified, all mtx commands will use
@@ -2144,14 +2156,14 @@ case $cmd in
     add-retensiondays)
 	add_retensiondays_to_retensiondate "${mediapool_name}" "${volume_name}" "${retension_days}"
 	if test $? -gt 0; then
-	    if [ $verbose -ge 1 ]; then
-		printf "${RED}Error: ${MAGENTA}No RetensionDate for ${GREEN}'%s'${MAGENTA} in media-pool ${GREEN}%s${NO_COLOR}\n" \
-		       "${mediapool_name}" "${volume_name}"
+	    if ! $quiet; then
+		printf "${RED}Error: ${MAGENTA}Could not update RetensionDate for ${GREEN}'%s'${MAGENTA} in media-pool ${GREEN}%s${NO_COLOR}\n" \
+		       "${volume_name}" "${mediapool_name}"
 	    fi
 	    return 1
 	else
 	    date_string_to_iso "${volume_retensiondate}"
-	    if [ $? -eq  0 ]; then
+	    if [ $? -eq  0 ] && ! $quiet; then
 		volume_date=$(date --date="${date_iso}Z")
 		printf "${MAGENTA}New RetensionDate date for ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}'%s'.\n" \
 		       "${volume_name}" "${volume_date}"
@@ -2163,7 +2175,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}MediaPolicy for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR}'%s'.\n" \
 		       "${volume_name}" "${volume_mediapolicy}"
 	    fi
@@ -2174,7 +2186,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}MediaPool name: ${GREEN}'%s'${NO_COLOR}\n" \
 		       "${mediapool_name}"
 	    fi
@@ -2185,7 +2197,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}MediaPool names: ${GREEN}'%s'${NO_COLOR}\n" \
 		       "${mediapool_names}"
 	    fi
@@ -2293,7 +2305,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape is-mounted: ${GREEN}true${NO_COLOR}\n"
 	    fi
 	fi
@@ -2303,7 +2315,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape mount: ${GREEN}true${NO_COLOR}\n"
 	    fi
 	fi
@@ -2313,7 +2325,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape reformat: ${GREEN}%s${NO_COLOR}\n" \
 		       "${volume_name}"
 	    fi
@@ -2324,7 +2336,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape unmount: ${GREEN}true${NO_COLOR}\n"
 	    fi
 	fi
@@ -2334,7 +2346,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		if  [ ${#volume_name} -ge 1 ]; then
 		    printf "${MAGENTA}Media changed in pool: ${GREEN}%s${NO_COLOR} (Volume-Name: ${GREEN}%s${NO_COLOR})\n" \
 			   "${mediapool_name}" "${volume_name}"
@@ -2350,7 +2362,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		if test ${#volume_name} -ge 1; then
 		    printf "${MAGENTA}Tape ${GREEN}'%s'${MAGENTA} for ${GREEN}'%s'${MAGENTA} mounted${NO_COLOR}\n" \
 			   "${volume_name}" "${mediapool_name}"
@@ -2394,7 +2406,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		date_string_to_iso "${volume_lastwrite}"
 		if [ $? -eq  0 ]; then
 		    volume_date=$(date --date="${date_iso}Z")
@@ -2409,7 +2421,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}New DefaultRetensionDays attribute for ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}'%s'.\n" \
 		       "${mediapool_name}" "${mediapool_defaultretensiondays}"
 	    fi
@@ -2420,7 +2432,7 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		date_string_to_iso "${volume_retensiondate}"
 		if [ $? -eq  0 ]; then
 		    volume_date=$(date --date="${date_iso}Z")
