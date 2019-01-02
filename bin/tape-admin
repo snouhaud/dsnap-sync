@@ -846,9 +846,9 @@ ltfs_reformat () {
 	    ltfs_umount
 	    if [ $? -eq 0 ]; then
 		ltfs_wipe
-		#if [ $? -eq 0 ]; then
+		if [ $? -eq 0 ]; then
 		    ltfs_format ${volume_name_active} ${volume_serial}
-		#fi
+		fi
 	    fi
 	fi
 	if [ $? -eq 0 ]; then
@@ -1147,7 +1147,7 @@ mount_tape () {
 			  mtx_load ${volume_slot}
 			  ltfs_mount
 	                  if [ $? -eq 0 ]; then
-	              return 0
+			      return 0
                           fi
 	    	      fi
 		  fi
@@ -2179,7 +2179,7 @@ case $cmd in
 		printf "${RED}Error: ${MAGENTA}Could not update RetensionDate for ${GREEN}'%s'${MAGENTA} in media-pool ${GREEN}%s${NO_COLOR}\n" \
 		       "${volume_name}" "${mediapool_name}"
 	    fi
-	    return 1
+	    exit 1
 	else
 	    date_string_to_iso "${volume_retensiondate}"
 	    if [ $? -eq  0 ] && ! $quiet; then
@@ -2208,7 +2208,7 @@ case $cmd in
     get-mediapolicy)
 	get_mediapolicy "${mediapool_name}" "${volume_name}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		printf "${MAGENTA}MediaPolicy for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR}'%s'.\n" \
@@ -2230,7 +2230,7 @@ case $cmd in
     get-mediapools)
 	get_mediapool_names
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		printf "${MAGENTA}MediaPool names: ${GREEN}'%s'${NO_COLOR}\n" \
@@ -2322,7 +2322,7 @@ case $cmd in
     ltfs-is-mounted)
 	ltfs_is_mounted
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape is-mounted: ${GREEN}true${NO_COLOR}\n"
@@ -2332,7 +2332,7 @@ case $cmd in
     ltfs-mount)
 	ltfs_mount
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape mount: ${GREEN}true${NO_COLOR}\n"
@@ -2353,7 +2353,7 @@ case $cmd in
     ltfs-umount)
 	ltfs_umount
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		printf "${MAGENTA}LTFS Tape unmount: ${GREEN}true${NO_COLOR}\n"
@@ -2379,7 +2379,7 @@ case $cmd in
     mount)
         mount_tape "${mediapool_name}" "${volume_name}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		if test ${#volume_name} -ge 1; then
@@ -2394,36 +2394,36 @@ case $cmd in
     	;;
     mtx-exchange)
 	mtx_exchange "${slot_source}" "${slot_target}"
-	return $?
+	exit $?
 	;;
     mtx-getlabel)
 	mtx_getlabel $slot_source
-	return $?
+	exit $?
 	;;
     mtx-inventory)
 	mtx_inventory
-	return $?
+	exit $?
 	;;
     mtx-load)
 	mtx_load "${slot_source}" "${drive}"
-	return $?
+	exit $?
 	;;
     mtx-status)
 	mtx_status "${slot_source}" "${slot_target}"
-	return $?
+	exit $?
 	;;
     mtx-transfer)
 	mtx_transfer "${slot_source}" "${slot_target}"
-	return $?
+	exit $?
 	;;
     mtx-unload)
 	mtx_unload "${slot_source}" "${drive}"
-	return $?
+	exit $?
 	;;
     update-lastwrite)
 	update_lastwrite "${mediapool_name}" "${volume_name}" "${date_string}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		date_string_to_iso "${volume_lastwrite}"
@@ -2438,7 +2438,7 @@ case $cmd in
     update-mediapool-retensiondays)
 	update_mediapool_retensiondays "${mediapool_name}" "${mediapool_defaultretensiondays}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		printf "${MAGENTA}New DefaultRetensionDays attribute for ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}'%s'.\n" \
@@ -2449,7 +2449,7 @@ case $cmd in
     update-retensiondate)
 	update_retensiondate "${mediapool_name}" "${volume_name}" "${date_string}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    if ! $quiet; then
 		date_string_to_iso "${volume_retensiondate}"
