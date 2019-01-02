@@ -64,6 +64,107 @@ NO_COLOR=
 # functions
 ###
 
+add_retensiondays_to_retensiondate () {
+    local mediapools_json=${mediapools:-$mediapools_json}
+    local mediapool_name=${1:-0}
+    local volume_name=${2}
+    local retension_days=${3:-0}
+
+    if [ $verbose -ge 1 ]; then
+	printf "${BLUE}add_retensiondays_to_retensiondate..${NO_COLOR}\n"
+    fi
+
+    if test ! -r ${mediapools_json}; then
+	if [ $verbose -ge 1 ]; then
+	    printf "${RED}Error:${MAGENTA} media-pool file ${GREEN}'%s'${MAGENTA} can't be opend!${NO_COLOR}\n" \
+		   "$mediapools_json"
+	fi
+	exit 1
+    else
+	json_path=${mediapools_json%/*}
+	json_file=${mediapools_json##*/}
+	cp "$mediapools_json" $XDG_RUNTIME_DIR/$json_file
+    fi
+
+    get_poolmember $mediapool_name $volume_name
+    test $? -ne 0 &&
+	printf "${RED}Error:${MAGENTA} tape ${GREEN}'%s'${MAGENTA} in not a member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		   "$volume_name" "$mediapool_name" &&
+	return 1
+
+    if [ $retension_days -eq 0 ]; then
+	# get default retensiondays form given mediapool
+	get_mediapool_retensiondays $mediapool_name
+	if [ $? -eq 0 ]; then
+	    retension_days=${mediapool_defaultretensiondays}
+	fi
+    fi
+    if [ $verbose -ge 2 ]; then
+	printf "${MAGENTA}New RetensionDays: ${NO_COLOR}'%s'.\n" \
+	       "${retension_days}"
+    fi
+
+    # get active retensiondate for given tape
+    get_retensiondate $mediapool_name $volume_name
+    if [ $? -eq 0 ]; then
+	# calculate retensiondate in seconds
+	date_iso_to_seconds "${volume_retensiondate}"
+	if [ $? -eq 0 ]; then
+	    volume_retensiondate_seconds=$(($date_seconds + $retension_days * 24 * 60 * 60))
+	    if [ $verbose -ge 3 ]; then
+		printf "${MAGENTA}New RetensionDate in seconds is: ${NO_COLOR}'%s'.\n" \
+		       "${volume_retensiondate_seconds}"
+	    fi
+	    # format to iso
+	    date_seconds_to_string "${volume_retensiondate_seconds}"
+	    if [ $? -eq 0 ]; then
+		volume_retensiondate=${date_iso}
+		if [ $verbose -ge 2 ]; then
+		    date_string_tz=$(echo $volume_retensiondate | cut -c 1-8)
+		    volume_date=$(date --date="${date_string_tz}Z")
+		    printf "${MAGENTA}RetensionDate is: ${NO_COLOR}'%s'.\n" \
+			   "${volume_date}"
+		fi
+	    fi
+	fi
+    fi
+
+    # update retensionsdate
+    if [ ${#volume_name} -ge 1 ]; then
+	cmd="jq --monochrome-output --ascii-output '.MediaPool[] \
+		| select(.Name == \"$mediapool_name\") \
+		| .Member \
+		| map(.VolumeName == \"$volume_name\") | index(true)' \
+		${mediapools_json}"
+	tape_index=$(eval $cmd)
+	if [ $? -eq 0 ]; then
+	    cmd="jq --monochrome-output --ascii-output '(.MediaPool[] \
+		| select(.Name == \"$mediapool_name\") \
+	    	| .Member[$tape_index] \
+		| .RetensionDate) \
+		|= \"$volume_retensiondate\" ' \
+		${mediapools_json} > $XDG_RUNTIME_DIR/$json_file"
+	    $(eval $cmd)
+	    if [ $? -eq 0 ]; then
+		cp "$XDG_RUNTIME_DIR/$json_file" "$mediapools_json"
+	    else
+	        if [ $verbose -ge 1 ]; then
+	            printf "${RED}Error:${MAGENTA} Can't update RetensionDate ${GREEN}'%s'${MAGENTA} for Tape ${GREEN}'%s'${NO_COLOR}\n" \
+		           "$volume_retensiondate" "$volume_name"
+	        fi
+		return 1
+	    fi
+	else
+	    return 1
+	fi
+
+	if [ $verbose -ge 2 ]; then
+	    printf "${MAGENTA}New RetensionDate in UTC for volume ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}%s${NO_COLOR}\n" \
+	       "$volume_name" "$volume_retensiondate"
+	fi
+    fi
+}
+
 check_prerequisites () {
     # requested binaries:
     which ${ATTR} >/dev/null 2>&1 || { printf "'%s' is not installed.\n" ${ATTR}  && exit 1; }
@@ -1899,102 +2000,6 @@ update_mediapool_retensiondays () {
 	fi
 }
 
-add_retensiondays_to_retensiondate () {
-    local mediapools_json=${mediapools:-$mediapools_json}
-    local mediapool_name=${1:-0}
-    local volume_name=${2}
-    local retension_days=${3:-0}
-
-    if [ $verbose -ge 1 ]; then
-	printf "${BLUE}add_retensiondays_to_retensiondate..${NO_COLOR}\n"
-    fi
-
-    if test ! -r ${mediapools_json}; then
-	if [ $verbose -ge 1 ]; then
-	    printf "${RED}Error:${MAGENTA} media-pool file ${GREEN}'%s'${MAGENTA} can't be opend!${NO_COLOR}\n" \
-		   "$mediapools_json"
-	fi
-	exit 1
-    else
-	json_path=${mediapools_json%/*}
-	json_file=${mediapools_json##*/}
-	cp "$mediapools_json" $XDG_RUNTIME_DIR/$json_file
-    fi
-
-
-    if [ $retension_days -eq 0 ]; then
-	# get default retensiondays form given mediapool
-	get_mediapool_retensiondays $mediapool_name
-	if [ $? -eq 0 ]; then
-	    retension_days=${mediapool_defaultretensiondays}
-	fi
-    fi
-    if [ $verbose -ge 2 ]; then
-	printf "${MAGENTA}New RetensionDays: ${NO_COLOR}'%s'.\n" \
-	       "${retension_days}"
-    fi
-
-    # get active retensiondate for given tape
-    get_retensiondate $mediapool_name $volume_name
-    if [ $? -eq 0 ]; then
-	# calculate retensiondate in seconds
-	date_iso_to_seconds "${volume_retensiondate}"
-	if [ $? -eq 0 ]; then
-	    volume_retensiondate_seconds=$(($date_seconds + $retension_days * 24 * 60 * 60))
-	    if [ $verbose -ge 3 ]; then
-		printf "${MAGENTA}New RetensionDate in seconds is: ${NO_COLOR}'%s'.\n" \
-		       "${volume_retensiondate_seconds}"
-	    fi
-	    # format to iso
-	    date_seconds_to_string "${volume_retensiondate_seconds}"
-	    if [ $? -eq 0 ]; then
-		volume_retensiondate=${date_iso}
-		if [ $verbose -ge 2 ]; then
-		    date_string_tz=$(echo $volume_retensiondate | cut -c 1-8)
-		    volume_date=$(date --date="${date_string_tz}Z")
-		    printf "${MAGENTA}RetensionDate is: ${NO_COLOR}'%s'.\n" \
-			   "${volume_date}"
-		fi
-	    fi
-	fi
-    fi
-
-    # update retensionsdate
-    if [ ${#volume_name} -ge 1 ]; then
-	cmd="jq --monochrome-output --ascii-output '.MediaPool[] \
-		| select(.Name == \"$mediapool_name\") \
-		| .Member \
-		| map(.VolumeName == \"$volume_name\") | index(true)' \
-		${mediapools_json}"
-	tape_index=$(eval $cmd)
-	if [ $? -eq 0 ]; then
-	    cmd="jq --monochrome-output --ascii-output '(.MediaPool[] \
-		| select(.Name == \"$mediapool_name\") \
-	    	| .Member[$tape_index] \
-		| .RetensionDate) \
-		|= \"$volume_retensiondate\" ' \
-		${mediapools_json} > $XDG_RUNTIME_DIR/$json_file"
-	    $(eval $cmd)
-	    if [ $? -eq 0 ]; then
-		cp "$XDG_RUNTIME_DIR/$json_file" "$mediapools_json"
-	    else
-	        if [ $verbose -ge 1 ]; then
-	            printf "${RED}Error:${MAGENTA} Can't update RetensionDate ${GREEN}'%s'${MAGENTA} for Tape ${GREEN}'%s'${NO_COLOR}\n" \
-		           "$volume_retensiondate" "$volume_name"
-	        fi
-		return 1
-	    fi
-	else
-	    return 1
-	fi
-
-	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}New RetensionDate in UTC for volume ${GREEN}'%s'${MAGENTA} is: ${NO_COLOR}%s${NO_COLOR}\n" \
-	       "$volume_name" "$volume_retensiondate"
-	fi
-    fi
-}
-
 update_retensiondate () {
     local mediapools_json=${mediapools:-$mediapools_json}
     local mediapool_name=${1:-0}
@@ -2170,6 +2175,22 @@ case $cmd in
 	    fi
 	fi
     	;;
+    get-lastwrite)
+	valid_member=0
+	get_lastwrite "${mediapool_name}" "${volume_name}"
+	if test $? -gt 0; then
+	    return 1
+	else
+	    if ! $quiet; then
+		date_string_to_iso ${volume_lastwrite}
+		if [ $? -eq 0 ]; then
+		    volume_date=$(date --date="${date_iso}Z")
+		    printf "${MAGENTA}Last write date for Volume ${GREEN}'%s'${MAGENTA} from media-pool ${GREEN}'%s'${MAGENTA} is : ${NO_COLOR}'%s'.\n" \
+			   "${volume_name}" "${mediapool_name}" "${volume_date}"
+		fi
+	    fi
+	fi
+    	;;
     get-mediapolicy)
 	get_mediapolicy "${mediapool_name}" "${volume_name}"
 	if test $? -gt 0; then
@@ -2209,51 +2230,22 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}Volume-Name ${GREEN}'%s'${MAGENTA} is a valid mediapool member.${NO_COLOR}\n" \
 		       "${volume_name}"
 	    fi
 	    valid_member=1
 	fi
     	;;
-    get-lastwrite)
-	valid_member=0
-	get_lastwrite "${mediapool_name}" "${volume_name}"
-	if test $? -gt 0; then
-	    return 1
-	else
-	    if [ $verbose -ge 1 ]; then
-		date_string_to_iso ${volume_lastwrite}
-		if [ $? -eq 0 ]; then
-		    volume_date=$(date --date="${date_iso}Z")
-		    printf "${MAGENTA}Last write date for Volume ${GREEN}'%s'${MAGENTA} from media-pool ${GREEN}'%s'${MAGENTA} is : ${NO_COLOR}'%s'.\n" \
-			   "${volume_name}" "${mediapool_name}" "${volume_date}"
-		fi
-	    fi
-	fi
-    	;;
     get-poolmember-next)
 	valid_member=0
 	get_poolmember_next "${mediapool_name}" "${volume_name}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}Next Volume-Name from media-pool ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
 		       "${mediapool_name}" "${volume_name_next}"
-	    fi
-	fi
-    	;;
-    get-retensiondate)
-	get_retensiondate "${mediapool_name}" "${volume_name}"
-	if test $? -gt 0; then
-	    return 1
-	else
-	    date_string_to_iso "${volume_retensiondate}"
-	    volume_date=$(date --date="${date_iso}Z")
-	    if [ $verbose -ge 1 ]; then
-		printf "${MAGENTA}RetensionDate for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
-		       "${volume_name}" "${volume_date}"
 	    fi
 	fi
     	;;
@@ -2262,38 +2254,51 @@ case $cmd in
 	if test $? -gt 0; then
 	    return 1
 	else
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}Default retension days for tapes in mediapool ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
 		       "${mediapool_name}" "${mediapool_defaultretensiondays}"
+	    fi
+	fi
+    	;;
+    get-retensiondate)
+	get_retensiondate "${mediapool_name}" "${volume_name}"
+	if test $? -gt 0; then
+	    exit 1
+	else
+	    date_string_to_iso "${volume_retensiondate}"
+	    volume_date=$(date --date="${date_iso}Z")
+	    if ! $quiet; then
+		printf "${MAGENTA}RetensionDate for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
+		       "${volume_name}" "${volume_date}"
 	    fi
 	fi
     	;;
     get-slot)
 	get_slot "${mediapool_name}" "${volume_name}"
 	if test $? -eq 0; then
-	    if [ $verbose -ge 1 ]; then
+	    if ! $quiet; then
 		printf "${MAGENTA}Slot location for ${GREEN}'%s'${MAGENTA} is:${NO_COLOR} %s.\n" \
 		       "${volume_name}" "${volume_slot}"
 	    fi
 	fi
-	return $?
+	exit $?
     	;;
     ltfs-format)
 	ltfs_format "${volume_name}" "${tape_id}"
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	fi
 	;;
     ltfs-getattribute)
 	ltfs_is_mounted
 	if test $? -gt 0; then
-	    return 1
+	    exit 1
 	else
 	    ltfs_get_attribute "${ltfs_attribute_name}"
 	    if test $? -gt 0; then
 		return 1
 	    else
-		if [ $verbose -ge 1 ]; then
+		if ! $quiet; then
 		    printf "${MAGENTA}LTFS attribute ${GREEN}'%s'${MAGENTA} is: ${GREEN}'%s'${NO_COLOR}\n" \
 			   "${ltfs_attribute_name}" "${ltfs_attribute_value}"
 		fi
