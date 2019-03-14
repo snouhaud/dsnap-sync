@@ -1,11 +1,11 @@
-dsnap-sync (0.6.4) stable; urgency=low
+dsnap-sync (0.6.4) unstable; urgency=low
 
   [Ralf Zerres]
   * branch: master
 
  -- Ralf Zerres <rzerres@networkx.de>  Thu, 14 Mar 2019 09:20:02 +0100
 
-dsnap-sync (0.6.0) stable; urgency=low
+dsnap-sync (0.6.0) unstable; urgency=low
 
   [Ralf Zerres]
   * branch: master
@@ -16,7 +16,7 @@ dsnap-sync (0.6.0) stable; urgency=low
 
  -- Ralf Zerres <rzerres@networkx.de>  Sat, 21 Sep 2018 20:00:00 +0200
 
-dsnap-sync (0.5.9) stable; urgency=low
+dsnap-sync (0.5.9) unstable; urgency=low
 
   [Ralf Zerres]
   * branch: wip-d2d
@@ -28,7 +28,7 @@ dsnap-sync (0.5.9) stable; urgency=low
 
  -- Ralf Zerres <rzerres@networkx.de>  Sat, 25 Aug 2018 20:00:00 +0200
 
-dsnap-sync (0.5.3) stable; urgency=low
+dsnap-sync (0.5.3) unstable; urgency=low
 
   [Ralf Zerres]
   * initial package
