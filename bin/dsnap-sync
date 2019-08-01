@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/sh
 
 # dsnap-sync
 # https://github.com/rzerres/dsnap-sync
@@ -27,7 +27,7 @@
 # difference for the next incremental snapshot.
 
 progname="${0##*/}"
-version="0.6.4"
+version="0.6.5"
 
 # The following lines are modified by the Makefile or
 # find_snapper_config script
@@ -41,16 +41,8 @@ test ! -d $XDG_RUNTIME_DIR/$progname && mkdir -p $XDG_RUNTIME_DIR/$progname
 TMPDIR=$(mktemp --tmpdir=$XDG_RUNTIME_DIR/$progname -d)
 
 # define fifo pipes
-#PIPE=$TMPDIR/$progname.out
-#mkfifo $PIPE
-#systemd-cat --identifier="$progname" < $PIPE &
-
 BTRFS_PIPE=$TMPDIR/btrfs.fifo
 test -p $BTRFS_PIPE && mkfifo $BTRFS_PIPE
-
-# redirect descriptors to given pipes
-#exec 3>$PIPE
-4>$BTRFS_PIPE
 
 # global variables
 args=
@@ -346,6 +338,7 @@ get_media_infos () {
 	if [ -z $remote ]; then
 	    tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
 	else
+	    $ssh tape-admin --version
 	    $ssh tape-admin --verbose=$verbose --mount ${mediapool_name} ${volume_name}
 	fi
 	if [ $? -eq 0 ]; then
@@ -1682,9 +1675,9 @@ run_backup () {
 
 	case $selected_fstype in
 	     btrfs)
-		 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>4 \
+		 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>$BTRFS_PIPE \
 		     | $cmd_pv \
-		     $cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot/ 1>4 2>&1"
+		     $cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot/ 1>$BTRFS_PIPE 2>&1"
 		 ;;
 	     *)
 		 # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
@@ -1697,7 +1690,7 @@ run_backup () {
 		     else
 			 cmd="btrfs send $btrfs_verbose_flag $snapper_source_snapshot 2>/dev/null \
 		     	     | $cmd_pv \
-			     $cmd_ionice $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>4"
+			     $cmd_ionice $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>$BTRFS_PIPE"
 		     fi
 		 else
 		     if [ $verbose -ge 2 ]; then
@@ -1731,7 +1724,7 @@ run_backup () {
 		fi
 		$(eval $cmd)
 		if [ "$?" -gt 0 ]; then
-		    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat <4)"
+		    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat <$BTRFS_PIPE)"
 		    error_count=$(($error_count+1))
 		    # go for next configuration
 		    i=$(($i+1))
@@ -1808,21 +1801,21 @@ run_backup () {
 			    # subvolume on the source and the receiving location (the parent-id).
 			    # using "btrfs send -p" instead of "btrfs send -c", then no parent search would be
 			    # needed (Andreij explained in: https://www.spinics.net/lists/linux-btrfs/msg69369.html)
-			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>4 \
+			    cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 			    	| $cmd_pv \
-				$cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot/ 1>4 2>&1"
+				$cmd_ionice $ssh btrfs receive $btrfs_verbose_flag $snapper_target_snapshot/ 1>$BTRFS_PIPE 2>&1"
 			    ;;
 			*)
 			    # Can't use btrfs receive, since target filesystem can't support btrfs snapshot feature
 			    snapper_target_stream=${snapper_target_id}_incremental.btrfs
 			    if [ -z $remote ]; then
-				cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>4 \
+				cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 		     	     	| $cmd_pv \
-			     	$cmd_ionice cat > $snapper_target_snapshot/$snapper_target_stream 2>4"
+			     	$cmd_ionice cat > $snapper_target_snapshot/$snapper_target_stream 2>$BTRFS_PIPE"
 			    else
-				cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>4 \
+				cmd="btrfs send $btrfs_verbose_flag -p $snapper_common_sync_snapshot $snapper_source_snapshot 2>$BTRFS_PIPE \
 		     	     	| $cmd_pv \
-			     	$cmd_ionice $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>4"
+			     	$cmd_ionice $ssh 'cat > $snapper_target_snapshot/$snapper_target_stream' 2>$BTRFS_PIPE"
 			    fi
 			    ;;
 		    esac
@@ -1841,9 +1834,9 @@ run_backup () {
 			0)
 			    ;;
 			1)
-			    # empty stream, no changes
-			    printf "${MAGENTA}btrfs pipe return-code: ${GREEN}'%s'${NO_COLOR}\n" "$ret"
-			    printf "${MAGENTA}  -> %s${NO_COLOR}\n" "$(cat <4)"
+			    # empty stream, error, no changes
+			    printf "${MAGENTA}btrfs pipe return-code: ${RED}'%s'${NO_COLOR}\n" "$ret"
+			    printf "${RED}%s${NO_COLOR}\n" "$(cat <$BTRFS_PIPE)"
 			    run_cleanup ${selected_config}
 			    # go for next configuration
 			    i=$(($i+1))
@@ -1854,7 +1847,7 @@ run_backup () {
 			    ;;
 			*)
 			    printf "${RED}btfs pipe ERROR: '%s'\n" "$ret"
-			    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat <4)"
+			    printf "${RED}BTRFS_PIPE: %s${NO_COLOR}\n" "$(cat <$BTRFS_PIPE)"
 			    run_cleanup ${selected_config}
 			    # go for next configuration
 			    i=$(($i+1))
