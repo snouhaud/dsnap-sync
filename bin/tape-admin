@@ -22,7 +22,7 @@
 # Helper routines for tape handling
 
 progname="${0##*/}"
-version="0.0.13"
+version="0.0.14"
 
 # global variables
 color=0
@@ -320,6 +320,7 @@ get_lastwrite () {
 	    | .LastWrite ' \
 	    ${mediapools_json}"
     fi
+    volume_name_next=$volume_name
     volume_lastwrite=$(eval $cmd)
     if [ ${#volume_lastwrite} -gt 1 ]; then
 	volume_lastwrite=$(echo $volume_lastwrite | sed -e 's/"//g')
@@ -493,8 +494,18 @@ get_poolmember () {
 	       "$mediapool_name" "$poolmember"
     fi
 
+    i=0
     for i in $poolmember ; do
-	if test "$i" = "${volume_name}"; then
+        if [ "${volume_name}" = "any" ]; then
+            volume_name = $i
+	    if [ $verbose -ge 2 ]; then
+		printf "${MAGENTA}selecting first volume_name ${GREEN}'%s'${MAGENTA} from media-pool ${GREEN}'%s'${NO_COLOR}\n" \
+		       "$i" "$mediapool_name"
+	    fi
+	    return 0
+	    break
+        fi
+        if test "$i" = "${volume_name}"; then
 	    if [ $verbose -ge 2 ]; then
 		printf "${MAGENTA}volume_name ${GREEN}'%s'${MAGENTA} is member of media-pool ${GREEN}'%s'${NO_COLOR}\n" \
 		       "$i" "$mediapool_name"
@@ -509,7 +520,7 @@ get_poolmember () {
 get_poolmember_next () {
     local mediapools_json=${mediapools:-$mediapools_json}
     local mediapool_name=${1}
-    local volume_name=${2:-"none"}
+    local volume_name=${2:-"any"}
 
     if [ $verbose -ge 1 ]; then
 	printf "${BLUE}get_poolmember_next...${NO_COLOR}\n"
@@ -1009,6 +1020,10 @@ media_change () {
     if [ ${#mediapool_name } -ge 1 ]; then
 	if [ ${#volume_name } -eq 0 ]; then
 	    get_lastwrite "${mediapool_name}"
+	    if [ $verbose -ge 2 ]; then
+		printf "${MAGENTA}Last written Volume: ${GREEN}%s${NO_COLOR}\n" \
+		       "${volume_name_next}"
+	    fi
 	fi
 	add_retensiondays_to_retensiondate "${mediapool_name}" "${volume_name}" "${retension_days}"
 	if test $? -eq 0; then
