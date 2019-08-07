@@ -173,16 +173,25 @@ create_snapshot () {
 		   "$selected_config"
 	fi
 	if [ -z $remote ]; then
-	    snapper_source_id=$(snapper --config "$selected_config" create \
+	    ret=$(snapper --config "$selected_config" create \
 					--print-number \
 					--description "$snap_description_running" \
 					--userdata "host=$HOSTNAME")
 	else
-	    snapper_source_id=$(snapper --config "$selected_config" create  \
+	    ret=$(snapper --config "$selected_config" create  \
 					--print-number  \
 					--description "$snap_description_running" \
 					--userdata "host=$remote")
 	fi
+	if [ "$ret" ]; then
+	    snapper_source_id=$ret
+	else
+	    # if snapper call fails, return value will do be a snapshot-id
+	    printf "${RED}Creation of snapper source snapshot failed${NO_COLOR}.\n" "$snapper_source_id"
+	    snapper_source_id=-1
+	    return 1
+	fi
+
 	if [ $SUBVOLUME = "/" ]; then
 	    SUBVOLUME=""
 	fi
@@ -1546,6 +1555,9 @@ run_backup () {
 	case $snapper_backup_type in
 	    btrfs-snapshot)
 		create_snapshot
+		if [ $snapper_source_id -lt 0 ]; then
+		    return 1
+		fi
 
 		# to use snapper on the target to supervise the synced snapshots
 		# the backup_location needs to be in a subvol ".snapshots" inside $selected_config (hardcoded in snapper)
@@ -1572,6 +1584,9 @@ run_backup () {
 	    btrfs-archive)
 		if [ $snapper_source_sync_id  -eq 0 ]; then
 		    create_snapshot
+		    if [ $snapper_source_id -lt 0 ]; then
+			return 1
+		    fi
 		else
 		    # check for last common snapshot
 		    snapper_source_id=$snapper_source_sync_id
@@ -1602,7 +1617,7 @@ run_backup () {
 
 	if [ $dryrun -eq 0 ]; then
 	    snapper_source_snapshot_size=0
-	    if [ "$interactive" -eq 1  ]; then
+	    if [ "$interactive" -eq 1 ]; then
 		if [ $verbose -ge 2 ]; then
 		    printf "${MAGENTA}Get size for given source snapshot (id=${GREEN}'%s'${MAGENTA}, path=${GREEN}'%s'${MAGENTA})${NO_COLOR} ...\n" \
 			   "$snapper_source_id" "$snapper_source_snapshot"
