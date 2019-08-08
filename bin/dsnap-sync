@@ -2133,8 +2133,14 @@ run_finalize () {
 		printf "calling: '%s'\n" "$cmd"
 	    fi
 	    ret=$(eval "$cmd")
-	    if [ $verbose -ge 3 ]; then
-		printf "return: '%s'\n" "$?"
+	    if [ "$ret" ]; then
+		if [ $verbose -ge 3 ]; then
+		    printf "return: '%s'\n" "$?"
+		fi
+	    else
+		printf "${RED}ERROR: ${MAGENTA}Updating snapper metadata for source snapshot id ${GREEN}'%s'${NO_COLOR}${MAGENTA} failed.\n" \
+		       "Please check for sufficiant space.${NO_COLOR}\n" \
+		       "$snapper_source_id"
 	    fi
 	    sync
 	fi
