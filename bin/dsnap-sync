@@ -50,6 +50,7 @@ answer=no
 archive_type=full
 batch=0
 btrfs_quota=0
+btrfs_quota_tmp=1
 #btrfs_verbose_flag=--verbose
 btrfs_verbose_flag=
 color=0
@@ -1628,16 +1629,20 @@ run_backup () {
 		    # qgroup identifiers conform to level/id where level 0 is reserved to the qgroups associated with subvolumes
 		    snapper_source_snapshot_size=$(btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
 						       | awk 'FNR>2 {print $2}')
+                    if [ $? -eq 1 ]; then
+                        # subvolume is not configured for quota, (temporary?) enable that
+                        if [ $btrfs_quota_tmp -eq 1 ]; then
+                            btrfs quota enable $snapper_source_snapshot 2>/dev/null
+                            btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
+                            snapper_source_snapshot_size=$(btrfs qgroup show -f --raw $snapper_source_snapshot 2>/dev/null \
+                                                               | awk 'FNR>2 {print $2}')
+			fi
+		    fi
+
 		    if [ $verbose -ge 3 ]; then
 			printf "${MAGENTA}BTRFS qgroup show result: ${GREEN}'%s'\b${NO_COLOR}'%s'\n" \
 	    		       "$?" "$snapper_source_snapshot_size"
 		    fi
-		    #if [ $? -eq 1 ]; then
-		    # subvolume is not configured for quota, (temporary?) enable that
-		    #btrfs_quota_tmp=1
-		    #btrfs quota enable $snapper_source_snapshot 2>/dev/null
-		    #btrfs quota rescan -w $snapper_source_snapshot 2>/dev/null
-		    #fi
 
 		    # need to substitue btrfs 'x.yyGiB' suffix, since pv will need 'xG'
 		    if [ $snapper_source_snapshot_size -ge 1048576 ]; then
@@ -1650,7 +1655,7 @@ run_backup () {
 		    fi
 
 		    # should we disable quota usage again?
-		    #if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
+		    if [ $btrfs_quota_tmp -eq 1 ]; then btrfs quota disable $snapper_source_snapshot; fi
 		else
 		    snapper_source_snapshot_size=$(du --one-file-system --summarize $snapper_source_snapshot 2>/dev/null \
 						       | awk -F ' ' '{print $1}')
