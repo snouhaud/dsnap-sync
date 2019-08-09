@@ -13,6 +13,7 @@
   * sub delete `<btrfs-restore-dir>/snapshot_ro`
   now you are able to mount the snapshot for further processing
 - dsnap-sync: parallel tasks per config
+- consider mbuffer for splitting up btrfs streams
 
 ## finished tasks ##
 
