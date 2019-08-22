@@ -3040,7 +3040,7 @@ verify_snapper_structure () {
 		fi
 		cmd="$ssh btrfs subvolume create $backup_root/$snapper_snapshots 2>/dev/null"
        		ret=$(eval $cmd)
-		if [ $? -ne 0 ]]; then
+		if [ $? -ne 0 ]; then
 		    printf "${RED}Error: ${MAGENTA}Creation of snapper subvolume ${GREEN}%s${MAGENTA} failed${NO_COLOR}\n" \
 		           "$backup_root/$snapper_snapshots"
 		    return 1
