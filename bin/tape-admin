@@ -496,8 +496,8 @@ get_poolmember () {
 
     i=0
     for i in $poolmember ; do
-        if [ "${volume_name}" = "any" ]; then
-            volume_name = $i
+        if [ "$volume_name" = "any" ]; then
+            volume_name=$i
 	    if [ $verbose -ge 2 ]; then
 		printf "${MAGENTA}selecting first volume_name ${GREEN}'%s'${MAGENTA} from media-pool ${GREEN}'%s'${NO_COLOR}\n" \
 		       "$i" "$mediapool_name"
@@ -736,10 +736,13 @@ ltfs_format () {
     fi
 
     make_err_file
-    ${MKLTFS} --device=$ltfs_devname --volume-name=${volume_name} --tape-serial=${volume_serial} --force 2>${ERRFILE}
-    RET=$?
-    rm -f ${ERRFILE}
-    return $RET
+    ltfs_umount
+    if [ $? -eq 0 ]; then
+	${MKLTFS} --device=$ltfs_devname --volume-name=${volume_name} --tape-serial=${volume_serial} --force 2>${ERRFILE}
+	RET=$?
+	rm -f ${ERRFILE}
+	return $RET
+    fi
 }
 
 ltfs_is_mounted () {
@@ -879,12 +882,9 @@ ltfs_reformat () {
 	if [ ${#need_format} -ge 1 ]; then
 	    ltfs_format ${volume_name_active} ${volume_serial}
 	else
-	    ltfs_umount
+	    ltfs_wipe
 	    if [ $? -eq 0 ]; then
-		ltfs_wipe
-		if [ $? -eq 0 ]; then
-		    ltfs_format ${volume_name_active} ${volume_serial}
-		fi
+		ltfs_format ${volume_name_active} ${volume_serial}
 	    fi
 	fi
 	if [ $? -eq 0 ]; then
@@ -934,48 +934,51 @@ ltfs_wipe () {
 	printf "${BLUE}ltfs_wipe...${NO_COLOR}\n"
     fi
 
-    #rm -rf $ltfs_mountpoint/*
-    make_err_file
-    if [ $verbose -ge 2 ]; then
-	printf "${MAGENTA}Restore the LTFS medium to an unpartitioned medium ...${NO_COLOR}\n"
-    fi
-    # ltfs_error.h
-    #define PROG_NO_ERRORS            0x00 /* Success */
-    #define PROG_TREAT_SUCCESS        0x01 /* Treat as success */
-    #define PROG_REBOOT_REQUIRED      0x02 /* Reboot required */
-    #define PROG_UNCORRECTED          0x04 /* Cannot recover, the cartridge is modified */
-    #define PROG_OPERATIONAL_ERROR    0x08 /* Get device error while processing, the cartridge may be modified */
-    #define PROG_USAGE_SYNTAX_ERROR   0x10 /* Wrong argument */
-    #define PROG_CANCELED_BY_USER     0x20 /* Canceled by user */
-    #define PROG_SHARED_LIB_ERROR     0x40 /* Library error */
+    ltfs_umount
+    if [ $? -eq 0 ]; then
+	#rm -rf $ltfs_mountpoint/*
+	make_err_file
+	if [ $verbose -ge 2 ]; then
+	    printf "${MAGENTA}Restore the LTFS medium to an unpartitioned medium ...${NO_COLOR}\n"
+	fi
+	# ltfs_error.h
+	#define PROG_NO_ERRORS            0x00 /* Success */
+	#define PROG_TREAT_SUCCESS        0x01 /* Treat as success */
+	#define PROG_REBOOT_REQUIRED      0x02 /* Reboot required */
+	#define PROG_UNCORRECTED          0x04 /* Cannot recover, the cartridge is modified */
+	#define PROG_OPERATIONAL_ERROR    0x08 /* Get device error while processing, the cartridge may be modified */
+	#define PROG_USAGE_SYNTAX_ERROR   0x10 /* Wrong argument */
+	#define PROG_CANCELED_BY_USER     0x20 /* Canceled by user */
+	#define PROG_SHARED_LIB_ERROR     0x40 /* Library error */
 
-    ${MKLTFS} --device=$ltfs_devname --wipe --force 2>${ERRFILE}
-    RET=$?
-    rm -f ${ERRFILE}
-    if [ $verbose -ge 3 ]; then
-	printf "${MAGENTA}%s returncode: ${GREEN}%s${NO_COLOR}\n" \
-	       ${MKLTFS} $RET
+	${MKLTFS} --device=$ltfs_devname --wipe --force 2>${ERRFILE}
+	RET=$?
+	rm -f ${ERRFILE}
+	if [ $verbose -ge 3 ]; then
+	    printf "${MAGENTA}%s returncode: ${GREEN}%s${NO_COLOR}\n" \
+		   ${MKLTFS} $RET
+	fi
+	case $RET in
+	    1)
+		printf "${MAGENTA}%s: Treat as success ${GREEN}%s${NO_COLOR}\n" \
+		       ${MKLTFS} $RET
+		return 0
+		;;
+	    2)
+		printf "${MAGENTA}%s: Reboot required ${GREEN}%s${NO_COLOR}\n" \
+		       ${MKLTFS} $RET
+		return 0
+		;;
+	    8)
+		printf "${MAGENTA}%s: Get device error while processing, the cartridge may be modified; Return-Code: ${GREEN}%s${NO_COLOR}\n" \
+		       ${MKLTFS} $RET
+		return $RET
+		;;
+	    *)
+		return $RET
+		;;
+	esac
     fi
-    case $RET in
-	1)
-	    printf "${MAGENTA}%s: Treat as success ${GREEN}%s${NO_COLOR}\n" \
-		   ${MKLTFS} $RET
-	    return 0
-	    ;;
-	2)
-	    printf "${MAGENTA}%s: Reboot required ${GREEN}%s${NO_COLOR}\n" \
-		   ${MKLTFS} $RET
-	    return 0
-	    ;;
-	8)
-	    printf "${MAGENTA}%s: Get device error while processing, the cartridge may be modified ${GREEN}%s${NO_COLOR}\n" \
-		   ${MKLTFS} $RET
-	    return $RET
-	    ;;
-	*)
-	    return $RET
-	    ;;
-    esac
 }
 
 make_err_file() {
@@ -1038,7 +1041,7 @@ media_change () {
 	fi
 	get_poolmember_next "${mediapool_name}"
 	if test $? -eq 0; then
-	    if [ $verbose -ge 2 ]; then
+	    if [ $verbose -ge 1 ]; then
 		printf "${MAGENTA}MediaPool: ${GREEN}%s${NO_COLOR} (next tape: ${GREEN}%s${NO_COLOR})\n" \
 		       "${mediapool_name}" "${volume_name_next}"
 	    fi
@@ -1164,7 +1167,7 @@ mount_tape () {
 		                     "${volume_name}"
 	          	  fi
 			  ltfs_wipe
-			  ltfs_format ${volume_name} ${volume_serial}
+			  #ltfs_format ${volume_name} ${volume_serial}
 	                  if [ $? -eq 0 ]; then
 		              return 0
                           fi
@@ -1301,14 +1304,11 @@ mount_tape () {
 	    	compare_date $date_now $volume_retensiondate
 	    	if [ $? -eq 2 ]; then
 		    # retensiondate has exposed: wipe given tape
-		    ltfs_mount
-	            if [ $? -eq 0 ]; then
-			ltfs_wipe
-			ltfs_format ${volume_name} ${volume_serial}
-			if [ $? -eq 0 ]; then
-		            return 0
-			fi
-                    fi
+		    ltfs_wipe
+		    #ltfs_format ${volume_name} ${volume_serial}
+		    if [ $? -eq 0 ]; then
+		        return 0
+		    fi
 	    	fi
 	    	if [ $? -eq 1 ]; then
 		    # respect active retensiondate: unload given tape
