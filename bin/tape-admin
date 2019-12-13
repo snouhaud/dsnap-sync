@@ -791,16 +791,16 @@ ltfs_mount () {
 	    return 0
 	else
 	    # format tape if needed
-            if [ -z $volume_name_active ]; then
-                slot_source="0"
-                mtx_getlabel $slot_source
-            fi
-            need_format=$(grep "medium is not partitioned" ${ERRFILE})
-            rm -f ${ERRFILE}
-            if [ ${#need_format} -ge 1 ]; then
+	    if [ -z $volume_name_active ]; then
+		slot_source="0"
+		mtx_getlabel $slot_source
+	    fi
+	    need_format=$(grep "medium is not partitioned" ${ERRFILE})
+	    rm -f ${ERRFILE}
+	    if [ ${#need_format} -ge 1 ]; then
 		ltfs_format ${volume_name_active}
-                ltfs_mount
-            fi
+		ltfs_mount
+	    fi
 	    return $?
 	fi
     else
@@ -821,74 +821,93 @@ ltfs_reformat () {
     ltfs_is_mounted
     if [ $? -eq 0 ]; then
 	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}LTFS tape ${GREEN}'%s'${MAGENTA} is mounted to ${GREEN}'%s'${NO_COLOR}\n" \
-		   "$ltfs_devname" "$ltfs_mountpoint"
+	    printf "${MAGENTA}Unmount ${GREEN}'%s'${NO_COLOR} to reformat LTFS tape.\n" \
+		   "$ltfs_mountpoint"
 	fi
-	slot_source="0"
-        mtx_getlabel $slot_source
-	if [ ${#volume_name} -gt 0 ] && [ $volume_name_active != $volume_name ]; then
-	    get_mediapool_name $volume_name
+	ltfs_umount
+    fi
+
+    # Take care that we have the correct media in drive slot
+    slot_source="0"
+    mtx_getlabel $slot_source
+    if [ ${#volume_name_active} -gt 0 ]; then
+	if [ $volume_name_active != $volume_name ]; then
+	    if [ $verbose -ge 1 ]; then
+		printf "${MAGENTA}Loader needs to exchange loaded tape ${GREEN}'%s'${MAGENTA} with tape ${GREEN}'%s'${NO_COLOR}\n" \
+		       "$volume_name_active" "$volume_name"
+	    fi
 	    if [ $? -eq 0 ]; then
-		ltfs_umount
+		mtx_unload
 		if [ $? -eq 0 ]; then
-		    mtx_unload
-		    if [ $? -eq 0 ]; then
-			mount_tape "${mediapool_name}" "${volume_name}"
+		    if [ $verbose -ge 2 ]; then
+			printf "${MAGENTA}MTX finished unload tape ${GREEN}'%s'${NO_COLOR}\n" \
+			       "$volume_name_active"
 		    fi
+		    volume_name_active=""
 		fi
 	    fi
 	fi
-    else
-	if [ ! -d $ltfs_mountpoint ]; then
-	    mkdir -p $ltfs_mountpoint
-	fi
+    fi
+
+    if [ ${#volume_name_active} -eq 0 ]; then
+	# no tape in drive slot, load selected volume_name
 	get_mediapool_name "${volume_name}"
-	if [ $? -eq 0 ]; then
+	if [ ${#mediapool_name} -gt 0 ]; then
 	    get_slot "${mediapool_name}" "${volume_name}"
 	    if [ $? -eq 0 ]; then
-		slot_source=0
-		mtx_getlabel ${slot_source}
+		mtx_load ${volume_slot}
 		if [ $? -eq 0 ]; then
-		    if [ ${volume_name_active} != ${volume_name} ]; then
-			mtx_unload ${slot_source}
-			mtx load ${volume_slot}
-		    fi
-		    make_err_file
 		    if [ $verbose -ge 2 ]; then
-			printf "${MAGENTA}LTFS mounting tape ${GREEN}'%s'${MAGENTA} to ${GREEN}'%s'${NO_COLOR}\n" \
-			       "$ltfs_devname" "$ltfs_mountpoint"
-			${LTFS} -o devname=$ltfs_devname -o verbose=$verbose $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
-		    else
-			${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
-		    fi
-		    if [ $? -ge 0 ]; then
-			if [ -z $volume_name_active ]; then
-			    slot_source="0"
-			    mtx_getlabel $slot_source
-			fi
-			need_format=$(grep "medium is not partitioned" ${ERRFILE})
-			rm -f ${ERRFILE}
+			printf "${MAGENTA}MTX finished loading tape ${GREEN}'%s'${NO_COLOR}\n" \
+			       "$volume_name"
 		    fi
 		fi
 	    fi
 	fi
     fi
 
+    # check LTFS
+    if [ ! -d $ltfs_mountpoint ]; then
+	mkdir -p $ltfs_mountpoint
+    fi
+    make_err_file
+    if [ $verbose -ge 2 ]; then
+	printf "${MAGENTA}LTFS mounting tape ${GREEN}'%s'${MAGENTA} to ${GREEN}'%s'${NO_COLOR}\n" \
+	       "$ltfs_devname" "$ltfs_mountpoint"
+	${LTFS} -o devname=$ltfs_devname -o verbose=$verbose $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
+    else
+	${LTFS} -o devname=$ltfs_devname -o verbose=0 $ltfs_mountpoint 1>/dev/null 2>${ERRFILE}
+    fi
+    if [ $? -ge 0 ]; then
+	if [ -z $volume_name_active ]; then
+	    slot_source="0"
+	    mtx_getlabel $slot_source
+	fi
+	need_format=$(grep "medium is not partitioned" ${ERRFILE})
+	rm -f ${ERRFILE}
+    fi
+
     if [ ${#volume_name} -eq 0 ] || [ $volume_name_active = $volume_name ]; then
-        tape_id=$(echo $volume_name_active | sed -e 's/\([[:alpha:]]*-\)//g')
-        # tape_id needs to be exactly 6 character long
+	tape_id=$(echo $volume_name_active | sed -e 's/\([[:alpha:]]*-\)//g')
+	# tape_id needs to be exactly 6 character long
 	volume_serial=$(printf "%0.s0" $(seq 1 $((6 - ${#tape_id}))))
 	volume_serial="${volume_serial}${tape_id}"
 	if [ ${#need_format} -ge 1 ]; then
-	    ltfs_format ${volume_name_active} ${volume_serial}
+	    ltfs_format $volume_name_active $volume_serial
 	else
-	    ltfs_wipe
-	    if [ $? -eq 0 ]; then
-		ltfs_format ${volume_name_active} ${volume_serial}
+	    if [ $verbose -ge 2 ]; then
+		    printf "${MAGENTA}Wipe tape ${GREEN}'%s'${MAGENTA} (Volume-Name: ${GREEN}'%s'${NO_COLOR})\n" \
+		       "$volume_name_active" "$volume_serial"
 	    fi
-	fi
-	if [ $? -eq 0 ]; then
-            ltfs_mount
+	    # wiping: put tape in an unformatted state
+	    ltfs_wipe
+	    # RET = 8 -> error?
+	    if [ $? -eq 0 ]; then
+		ltfs_format $volume_name_active $volume_serial
+		if [ $? -eq 0 ]; then
+		    ltfs_mount
+		fi
+	    fi
 	fi
     fi
     return $?
