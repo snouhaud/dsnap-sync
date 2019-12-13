@@ -791,16 +791,16 @@ ltfs_mount () {
 	    return 0
 	else
 	    # format tape if needed
-	    if [ -z $volume_name_active ]; then
-		slot_source="0"
-		mtx_getlabel $slot_source
-	    fi
-	    need_format=$(grep "medium is not partitioned" ${ERRFILE})
-	    rm -f ${ERRFILE}
-	    if [ ${#need_format} -ge 1 ]; then
+            if [ -z $volume_name_active ]; then
+                slot_source="0"
+                mtx_getlabel $slot_source
+            fi
+            need_format=$(grep "medium is not partitioned" ${ERRFILE})
+            rm -f ${ERRFILE}
+            if [ ${#need_format} -ge 1 ]; then
 		ltfs_format ${volume_name_active}
-		ltfs_mount
-	    fi
+                ltfs_mount
+            fi
 	    return $?
 	fi
     else
@@ -958,7 +958,7 @@ ltfs_wipe () {
 	#rm -rf $ltfs_mountpoint/*
 	make_err_file
 	if [ $verbose -ge 2 ]; then
-	    printf "${MAGENTA}Restore the LTFS medium to an unpartitioned medium ...${NO_COLOR}\n"
+	    printf "${MAGENTA}Wiping LTFS medium, that creates an ${GREEN}'unpartitioned media'${MAGENTA} ...${NO_COLOR}\n"
 	fi
 	# ltfs_error.h
 	#define PROG_NO_ERRORS            0x00 /* Success */
@@ -970,13 +970,15 @@ ltfs_wipe () {
 	#define PROG_CANCELED_BY_USER     0x20 /* Canceled by user */
 	#define PROG_SHARED_LIB_ERROR     0x40 /* Library error */
 
-	${MKLTFS} --device=$ltfs_devname --wipe --force 2>${ERRFILE}
+	sleep 2
+	CMD="${MKLTFS} --device=$ltfs_devname --wipe --force"
+	if [ $verbose -ge 3 ]; then
+	    printf "${MAGENTA}Calling: ${GREEN}%s${NO_COLOR}\n" \
+		   ${CMD}
+	fi
+	${CMD} 2>${ERRFILE}
 	RET=$?
 	rm -f ${ERRFILE}
-	if [ $verbose -ge 3 ]; then
-	    printf "${MAGENTA}%s returncode: ${GREEN}%s${NO_COLOR}\n" \
-		   ${MKLTFS} $RET
-	fi
 	case $RET in
 	    1)
 		printf "${MAGENTA}%s: Treat as success ${GREEN}%s${NO_COLOR}\n" \
