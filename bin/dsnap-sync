@@ -32,7 +32,7 @@ version="0.6.5"
 # The following lines are modified by the Makefile or
 # find_snapper_config script
 #SNAPPER_CONFIG=/etc/conf.d/snapper
-SNAPPER_CONFIG=/etc/default/snapper
+SNAPPER_CONFIG=/etc/conf.d/snapper
 SNAPPER_TEMPLATE_DIR=/etc/snapper/config-templates
 SNAPPER_CONFIG_DIR=/etc/snapper/configs
 
@@ -2101,9 +2101,9 @@ run_finalize () {
 			    	       \'$snapper_target_id\')
 			else
 			    ret=$(eval snapper --config $snapper_target_config modify \
-			    	       --description "$snap_description_finished" \
-				       --userdata "host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid" \
-				       --cleanup-algorithm "timeline" \
+			    	       --description \"$snap_description_finished\" \
+				       --userdata \"host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\" \
+				       --cleanup-algorithm \"timeline\" \
 			     	       $snapper_target_id)
 			fi
 			if [ $verbose -ge 3 ]; then
