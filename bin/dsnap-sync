@@ -2138,18 +2138,17 @@ run_finalize () {
 		printf "calling: '%s'\n" "$cmd"
 	    fi
 	    ret=$(eval "$cmd")
-	    if [ "$ret" ]; then
+	    if [ -z "$ret" ]; then
 		if [ $verbose -ge 3 ]; then
 		    printf "return: '%s'\n" "$?"
 		fi
 	    else
-		printf "${RED}ERROR: ${MAGENTA}Updating snapper metadata for source snapshot id ${GREEN}'%s'${NO_COLOR}${MAGENTA} failed.\n" \
-		       "Please check for sufficiant space.${NO_COLOR}\n" \
-		       "$snapper_source_id"
+		printf "${RED}ERROR: ${MAGENTA}Updating snapper metadata for source snapshot id ${GREEN}'%s'${NO_COLOR}${MAGENTA} failed.\n Please check for sufficiant space.${NO_COLOR}\n '%s'" \
+		       "$snapper_source_id" "$ret"
 	    fi
 	    sync
 	fi
-	if [ ${#snapper_source_sync_id} -gt 0 ]; then
+	if [ ${snapper_source_sync_id} -gt 0 ]; then
 	    # TODO: no snapper method to remove userdata pair, use awk
 	    cmd="snapper --config $selected_config modify \
 	    		 --description \"$snap_description_finished\" \
