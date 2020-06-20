@@ -78,7 +78,7 @@ snapper_subvolume_template="dsnap-sync"
 snapper_backup_type='none'
 #snapper_config_postfix="."`hostname`
 snapper_config_postfix=
-snap_cleanup_algorithm="timeline"
+snap_cleanup_algorithm="number"
 verbose=0
 volume_name=
 
@@ -2097,13 +2097,13 @@ run_finalize () {
 			    ret=$(eval $ssh snapper --config \\\'$snapper_target_config\\\' modify  \
 			    	       --description \\\'$snap_description_finished\\\' \
 			    	       --userdata \\\'host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\\\' \
-			    	       --cleanup-algorithm \'timeline\' \
+			    	       --cleanup-algorithm \'$snap_cleanup_algorithm\' \
 			    	       \'$snapper_target_id\')
 			else
 			    ret=$(eval snapper --config $snapper_target_config modify \
 			    	       --description \"$snap_description_finished\" \
 				       --userdata \"host=$src_host, subvolid=$src_subvolid, uuid=$src_uuid\" \
-				       --cleanup-algorithm \"timeline\" \
+				       --cleanup-algorithm \"$snap_cleanup_algorithm\" \
 			     	       $snapper_target_id)
 			fi
 			if [ $verbose -ge 3 ]; then
@@ -2129,7 +2129,7 @@ run_finalize () {
 	    cmd="snapper --config $selected_config modify \
 	    		 --description \"$snap_description_synced\" \
 			 --userdata \"backupdir=$backupdir, important=yes, host=$remote, subvolid=$selected_subvol, uuid=$selected_uuid\" \
-			 --cleanup-algorithm \"timeline\" \
+			 --cleanup-algorithm \"$snap_cleanup_algorithm\" \
 			 $snapper_source_id"
 
 	    if [ $verbose -ge 3 ]; then
